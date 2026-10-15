@@ -1,0 +1,1906 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ZigZag Exchange</title>
+<style>
+  :root {
+    color-scheme: dark;
+    --bg: #11161d;
+    --header: #0e131a;
+    --panel: #1a2029;
+    --raised: #212734;
+    --hover: #273043;
+    --line: #2c3544;
+    --line-strong: #434a59;
+    --text: #e8edf4;
+    --muted: #8d97a8;
+    --bid: #03a66d;
+    --ask: #f6465d;
+    --accent: #2abdd2;
+    --warn: #e0b15a;
+  }
+  * { box-sizing: border-box; }
+  [hidden] { display: none !important; }
+  html, body { margin: 0; min-height: 100%; background: var(--bg); color: var(--text); }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    font-size: 13px;
+    line-height: 1.4;
+  }
+  button, input, select { font: inherit; color: inherit; }
+  button { cursor: pointer; }
+  button:disabled { cursor: not-allowed; opacity: 0.45; }
+  button:focus-visible, input:focus-visible, select:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 1px;
+  }
+  .num { font-variant-numeric: tabular-nums; font-feature-settings: "tnum" 1; }
+  .page { min-height: 100vh; display: flex; flex-direction: column; }
+  header {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    padding: 8px 14px;
+    background: var(--header);
+    border-bottom: 1px solid var(--line);
+  }
+  .brand { display: flex; align-items: center; gap: 8px; min-width: 140px; }
+  .brand svg { color: var(--accent); display: block; }
+  .brand-name { font-weight: 650; letter-spacing: 0.02em; }
+  .brand-version { color: var(--muted); font-size: 11px; }
+  .market-picker { display: flex; align-items: center; gap: 10px; flex: 1; min-width: 0; }
+  .market-picker select { max-width: 280px; width: 100%; }
+  .meta { color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .wallet-box { display: flex; align-items: center; gap: 8px; margin-left: auto; }
+.wallet-box select, .market-picker select {
+  background: var(--panel);
+  border: 1px solid var(--line-strong);
+  border-radius: 4px;
+  padding: 6px 8px;
+}
+  #network-label { color: var(--muted); font-size: 12px; }
+  #wallet-button, .btn {
+    border-radius: 4px;
+    border: 1px solid var(--line-strong);
+    background: var(--raised);
+    padding: 6px 10px;
+  }
+  #wallet-button { border-color: var(--accent); color: var(--accent); background: transparent; }
+  .banner, .status {
+    padding: 7px 14px;
+    border-bottom: 1px solid var(--line);
+    font-size: 12px;
+  }
+  .banner.info, .status.info { background: #142228; color: #b7e4ea; }
+  .banner.warn, .status.warn { background: #2a2416; color: var(--warn); }
+  .banner.error, .status.error { background: #2a161b; color: #ffb3bd; }
+  .banner.ok, .status.ok { background: #12241c; color: #9ee0c2; }
+  .status { display: flex; gap: 12px; align-items: baseline; }
+  .status a { color: var(--accent); }
+  main { display: flex; flex-direction: column; gap: 12px; padding: 12px; }
+  .trade-row, .lower-row { display: flex; gap: 12px; align-items: stretch; }
+  .panel {
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: 4px;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+  }
+  .panel h2 {
+    margin: 0;
+    padding: 8px 10px;
+    font-size: 12px;
+    font-weight: 600;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    color: var(--muted);
+    border-bottom: 1px solid var(--line);
+  }
+  .panel .body { padding: 10px; display: flex; flex-direction: column; gap: 8px; }
+  .form-panel { flex: 0 0 340px; }
+  .book-panel { flex: 1; }
+  .lower-row { flex-wrap: wrap; }
+  .lower-row > .panel { flex: 1 1 360px; }
+  .side-toggle { display: flex; gap: 6px; }
+  .side-toggle button { flex: 1; border: 1px solid var(--line-strong); background: transparent; padding: 7px; border-radius: 4px; }
+  .side-toggle button.buy.is-active { background: var(--bid); border-color: var(--bid); color: #04140e; font-weight: 650; }
+  .side-toggle button.sell.is-active { background: var(--ask); border-color: var(--ask); color: #2a060c; font-weight: 650; }
+  label { display: flex; flex-direction: column; gap: 4px; color: var(--muted); font-size: 11px; letter-spacing: 0.04em; text-transform: uppercase; }
+  label input, .inline input {
+    text-transform: none;
+    letter-spacing: 0;
+    font-size: 13px;
+    background: var(--bg);
+    border: 1px solid var(--line-strong);
+    border-radius: 4px;
+    padding: 8px;
+  }
+  .amount-row { display: flex; gap: 6px; align-items: end; }
+  .amount-row label { flex: 1; }
+  .total-line, .hint, .form-message { color: var(--muted); font-size: 12px; text-transform: none; letter-spacing: 0; }
+  .form-message { min-height: 1.2em; color: var(--warn); }
+  .actions { display: flex; flex-direction: column; gap: 6px; }
+  .btn.buy { background: var(--bid); border-color: var(--bid); color: #04140e; font-weight: 650; }
+  .btn.sell { background: var(--ask); border-color: var(--ask); color: #2a060c; font-weight: 650; }
+  .btn.accent { border-color: var(--accent); color: var(--accent); background: transparent; }
+  .check { flex-direction: row; align-items: center; text-transform: none; letter-spacing: 0; font-size: 12px; color: var(--text); gap: 8px; }
+  .check input { width: auto; }
+  .wrap-box { border-top: 1px solid var(--line); padding-top: 8px; display: flex; flex-direction: column; gap: 8px; }
+  .wrap-actions { display: flex; gap: 6px; }
+  .wrap-actions button, .tool-actions { flex: 1; }
+  .book-head, .level {
+    display: flex;
+    gap: 8px;
+    padding: 2px 10px;
+  }
+  .book-head { color: var(--muted); font-size: 11px; text-transform: uppercase; letter-spacing: 0.04em; padding-top: 8px; }
+  .book-head span, .level span { flex: 1; text-align: right; position: relative; }
+  .book-head span:first-child, .level span:first-child { text-align: left; }
+  .book-scroll {
+    min-height: 320px;
+    max-height: 640px;
+    overflow: auto;
+    display: flex;
+    flex-direction: column;
+  }
+  #asks:not(:empty) { margin-top: auto; }
+  .level { position: relative; width: 100%; border: 0; background: transparent; color: inherit; padding: 3px 10px; text-align: inherit; }
+  .level:hover { background: var(--hover); }
+  .level .bar { position: absolute; top: 1px; bottom: 1px; right: 0; opacity: 0.22; pointer-events: none; }
+  .level.ask .bar { background: var(--ask); }
+  .level.bid .bar { background: var(--bid); }
+  .level.ask .px { color: var(--ask); }
+  .level.bid .px { color: var(--bid); }
+  .spread {
+    display: flex;
+    justify-content: space-between;
+    padding: 6px 10px;
+    border-top: 1px solid var(--line);
+    border-bottom: 1px solid var(--line);
+    color: var(--accent);
+    background: #152026;
+  }
+  table { width: 100%; border-collapse: collapse; }
+  th, td { padding: 5px 8px; border-bottom: 1px solid var(--line); }
+  th { color: var(--muted); font-size: 11px; font-weight: 500; text-align: right; text-transform: uppercase; letter-spacing: 0.04em; }
+  th:first-child, td:first-child { text-align: left; }
+  td.buy { color: var(--bid); }
+  td.sell { color: var(--ask); }
+  .empty { color: var(--muted); padding: 12px; }
+  .tools .grid { display: flex; flex-wrap: wrap; gap: 8px; }
+  .tools label { flex: 1 1 180px; }
+  .tool-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+  .id-out {
+    word-break: break-all;
+    background: var(--bg);
+    border: 1px solid var(--line);
+    border-radius: 4px;
+    padding: 8px;
+    min-height: 34px;
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    font-size: 12px;
+  }
+  .notes { color: var(--muted); font-size: 12px; }
+  .notes summary { cursor: pointer; color: var(--text); }
+  .notes li { margin: 4px 0; }
+  ::-webkit-scrollbar { width: 12px; height: 12px; }
+  ::-webkit-scrollbar-track { background: #2d313c; }
+  ::-webkit-scrollbar-thumb { background: #5b5f67; }
+  @media (max-width: 960px) {
+    header { flex-wrap: wrap; }
+    .wallet-box { margin-left: 0; }
+    .meta { white-space: normal; }
+    .trade-row, .lower-row { flex-direction: column; }
+    .form-panel { flex-basis: auto; }
+    .book-scroll { min-height: 320px; max-height: 520px; }
+  }
+</style>
+</head>
+<body>
+<div class="page">
+  <header>
+    <div class="brand">
+      <svg viewBox="0 0 24 16" width="24" height="16" aria-hidden="true">
+        <path d="M1 12 L7 4 L12 10 L17 4 L23 12" fill="none" stroke="currentColor" stroke-width="2"></path>
+      </svg>
+      <span class="brand-name">ZigZag</span>
+      <span class="brand-version">V1</span>
+    </div>
+    <div class="market-picker">
+      <select id="market-select" aria-label="Market"></select>
+      <div class="meta num" id="market-meta">Select a market</div>
+    </div>
+    <div class="wallet-box">
+      <select id="chain-select" aria-label="Network"></select>
+      <span id="network-label">Wallet</span>
+      <button type="button" id="wallet-button">Connect wallet</button>
+    </div>
+  </header>
+  <div class="banner info" id="banner">Loading exchange…</div>
+  <div class="status info" id="status-row">
+    <span id="status">Market data loads from the configured RPC without a wallet.</span>
+    <span id="tx-link"></span>
+  </div>
+  <main>
+    <div class="trade-row">
+      <section class="panel form-panel" aria-label="Order form">
+        <h2>Place order</h2>
+        <div class="body">
+          <div class="side-toggle">
+            <button type="button" id="side-buy" class="buy is-active">Buy</button>
+            <button type="button" id="side-sell" class="sell">Sell</button>
+          </div>
+          <label>Price <input id="price-input" inputmode="decimal" autocomplete="off" spellcheck="false" placeholder="0.00"></label>
+          <div class="amount-row">
+            <label>Amount <input id="amount-input" inputmode="decimal" autocomplete="off" spellcheck="false" placeholder="0.00"></label>
+            <button type="button" class="btn" id="max-amount">Max</button>
+          </div>
+          <div class="total-line num" id="total-output">Total —</div>
+          <div class="hint num" id="min-label">Minimum post —</div>
+          <div class="hint num" id="fee-label">Market fee —</div>
+          <div class="hint num" id="allowance-label">Allowance —</div>
+          <div class="hint" id="spender-label"></div>
+          <div class="form-message" id="form-message"></div>
+          <label class="check" id="fok-row" hidden>
+            <input type="checkbox" id="fok-check">
+            <span>Submit below the minimum as fill-or-kill. The order reverts if it does not fill completely.</span>
+          </label>
+          <div class="actions">
+            <button type="button" class="btn accent" id="approve-button" disabled>Approve</button>
+            <button type="button" class="btn" id="reset-allowance" hidden>Reset allowance to 0</button>
+            <button type="button" class="btn buy" id="place-button" disabled>Place order</button>
+          </div>
+          <div class="wrap-box">
+            <h2 style="padding:0;border:0;">ETH / WETH</h2>
+            <div class="hint num" id="eth-balance">ETH —</div>
+            <div class="hint num" id="weth-balance">WETH —</div>
+            <div class="hint" id="weth-contract"></div>
+            <label>Amount <input id="wrap-amount" inputmode="decimal" autocomplete="off" spellcheck="false" placeholder="0.00"></label>
+            <div class="wrap-actions">
+              <button type="button" class="btn" id="wrap-button" disabled>Wrap ETH</button>
+              <button type="button" class="btn" id="unwrap-button" disabled>Unwrap WETH</button>
+            </div>
+          </div>
+        </div>
+      </section>
+      <section class="panel book-panel" aria-label="Order book">
+        <h2>Order book</h2>
+        <div class="book-head num">
+          <span id="book-price-label">Price</span>
+          <span id="book-size-label">Size</span>
+          <span id="book-total-label">Total</span>
+        </div>
+        <div class="book-scroll" id="book-rows">
+          <div id="asks"></div>
+          <div class="spread num" id="spread"><span>Spread</span><span>—</span></div>
+          <div id="bids"></div>
+        </div>
+      </section>
+    </div>
+    <div class="lower-row">
+      <section class="panel" aria-label="Balances">
+        <h2>Balances</h2>
+        <div class="body" style="padding:0;">
+          <table>
+            <thead>
+              <tr>
+                <th>Token</th>
+                <th>Wallet</th>
+                <th>Reserved</th>
+                <th>Available</th>
+                <th>Allowance</th>
+              </tr>
+            </thead>
+            <tbody id="balance-body"></tbody>
+          </table>
+          <div class="empty" id="balance-note">Available is the wallet balance a new order can draw on. Reserved tokens are already escrowed in the market bank.</div>
+        </div>
+      </section>
+      <section class="panel" aria-label="Active orders">
+        <h2>Active orders</h2>
+        <div class="body" style="padding:0;">
+          <table>
+            <thead>
+              <tr>
+                <th>Side</th>
+                <th>Price</th>
+                <th>Remaining</th>
+                <th>Reserved</th>
+                <th></th>
+              </tr>
+            </thead>
+            <tbody id="orders-body"></tbody>
+          </table>
+        </div>
+      </section>
+    </div>
+    <section class="panel tools" aria-label="Market id">
+      <h2>Market id</h2>
+      <div class="body">
+        <p class="hint">MatchingOrderBook from github.com/k26dr/solidity-dex. The market id is read from the contract’s getMarketId function. This page does not hash it in the browser.</p>
+        <div class="grid">
+          <label>Exchange contract <input id="exchange-address" autocomplete="off" spellcheck="false" placeholder="0x"></label>
+        </div>
+        <p class="hint" id="exchange-hint">No MatchingOrderBook address is published for this chain. Paste a deployment before any approval or trade.</p>
+        <div class="tool-actions">
+          <button type="button" class="btn accent" id="use-exchange">Use exchange</button>
+          <button type="button" class="btn" id="clear-exchange">Clear exchange</button>
+        </div>
+        <div class="grid">
+          <label>Base asset <input id="base-asset" autocomplete="off" spellcheck="false" placeholder="0x"></label>
+          <label>Quote asset <input id="quote-asset" autocomplete="off" spellcheck="false" placeholder="0x"></label>
+          <label>Min base post <input id="min-base" inputmode="decimal" autocomplete="off" spellcheck="false" placeholder="0.0"></label>
+          <label>Min quote post <input id="min-quote" inputmode="decimal" autocomplete="off" spellcheck="false" placeholder="0.0"></label>
+          <label>Fee numerator <input id="fee-num" inputmode="numeric" autocomplete="off" spellcheck="false" placeholder="1"></label>
+          <label>Fee denominator <input id="fee-den" inputmode="numeric" autocomplete="off" spellcheck="false" placeholder="1000"></label>
+          <label>Fee receiver <input id="fee-receiver" autocomplete="off" spellcheck="false" placeholder="0x"></label>
+        </div>
+        <div class="tool-actions">
+          <button type="button" class="btn accent" id="compute-id" disabled>Compute market id</button>
+          <button type="button" class="btn" id="create-market" disabled>Create market</button>
+        </div>
+        <div class="id-out num" id="market-id-output">Market id appears here.</div>
+        <div class="tool-actions">
+          <label style="flex:1;">Load market id <input id="market-id-input" autocomplete="off" spellcheck="false" placeholder="0x"></label>
+        </div>
+        <div class="tool-actions">
+          <button type="button" class="btn" id="load-market-id" disabled>Load market</button>
+          <button type="button" class="btn" id="forget-market" disabled>Forget saved market</button>
+          <button type="button" class="btn" id="retry-button">Retry connection</button>
+        </div>
+        <details class="notes">
+          <summary>Integration notes</summary>
+          <ul id="notes"></ul>
+        </details>
+      </div>
+    </section>
+  </main>
+</div>
+<noscript>JavaScript is required for ZigZag Exchange.</noscript>
+<script>
+"use strict";
+
+/* Call interface: MatchingOrderBook.sol in https://github.com/k26dr/solidity-dex
+   That repo does not publish a MatchingOrderBook address on Robinhood Chain
+   or Ethereum. Leave exchangeAddress empty until you have the deployment.
+   A saved address in this browser overrides the empty default per chain. */
+const APP = {
+  bookDepth: 25,
+  logChunkBlocks: 200,
+  logChunks: 20,
+  pollMs: 5000,
+};
+
+const CHAINS = [
+  {
+    key: "robinhood",
+    chainId: "0x1237",
+    chainName: "Robinhood Chain",
+    rpcUrl: "https://rpc.mainnet.chain.robinhood.com",
+    explorerUrl: "https://robinhoodchain.blockscout.com",
+    wethAddress: "0x0Bd7D308f8E1639FAb988df18A8011f41EAcAD73",
+    exchangeAddress: "",
+  },
+  {
+    key: "ethereum",
+    chainId: "0x1",
+    chainName: "Ethereum",
+    rpcUrl: "https://ethereum.publicnode.com",
+    explorerUrl: "https://etherscan.io",
+    wethAddress: "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2",
+    exchangeAddress: "",
+  },
+];
+
+/* Selectors are the first 4 bytes of keccak256(signature), computed from the
+   published Solidity signatures. They are not derived in the browser. */
+const SEL = {
+  orderCounter: "b789bf52",
+  createMarketFee: "1c30290f",
+  createMarketPlain: "1d3661dd",
+  placeOrder: "581dd762",
+  cancelOrder: "32d4b9b9",
+  getMarketIdFee: "ee34e64e",
+  getMarketIdPlain: "2b33a46f",
+  getMarketDetails: "881268cb",
+  getFirstOrderId: "0ffffa5a",
+  getOrderBook: "ee3069f7",
+  balanceOf: "70a08231",
+  allowance: "dd62ed3e",
+  approve: "095ea7b3",
+  decimals: "313ce567",
+  symbol: "95d89b41",
+  deposit: "d0e30db0",
+  withdraw: "2e1a7d4d",
+};
+const TOPIC_MARKET_FEE = "0x13946ff58749c003a6f8f071c55c38b16b752946ac571cfbb0db32eab7a5a81d";
+const TOPIC_MARKET_PLAIN = "0x628c77d608f8cbc2312cef7139b7e2c0d821b1aed42448400615cda801370c12";
+const BUY = 0;
+const SELL = 1;
+const DEMO_TRADER = "0x00000000000000000000000000000000000000d1";
+
+const state = {
+  mode: "loading",
+  chainKey: localStorage.getItem("zigzag-exchange-v1:chain") || "robinhood",
+  interfaceKind: null,
+  account: null,
+  walletChainId: null,
+  markets: [],
+  marketId: null,
+  marketSignature: "",
+  asks: [],
+  bids: [],
+  bookTruncated: false,
+  baseWallet: 0n,
+  quoteWallet: 0n,
+  baseAllowance: 0n,
+  quoteAllowance: 0n,
+  ethBalance: 0n,
+  wethBalance: 0n,
+  tokenMeta: new Map(),
+  txLock: false,
+  refreshing: false,
+  refreshQueued: false,
+  pollTimer: null,
+  side: BUY,
+  banner: "Loading exchange…",
+  bannerKind: "info",
+  blockReason: "",
+};
+
+function chain() {
+  return CHAINS.find((item) => item.key === state.chainKey) || CHAINS[0];
+}
+
+function storageKey(suffix) {
+  return "zigzag-exchange-v1:" + chain().chainId + ":" + suffix;
+}
+
+function exchangeAddress() {
+  const saved = localStorage.getItem(storageKey("exchange"));
+  if (isAddress(saved)) return normAddr(saved);
+  return isAddress(chain().exchangeAddress) ? normAddr(chain().exchangeAddress) : "";
+}
+
+const $ = (id) => document.getElementById(id);
+
+function el(tag, className, text) {
+  const node = document.createElement(tag);
+  if (className) node.className = className;
+  if (text !== undefined && text !== null) node.textContent = text;
+  return node;
+}
+
+function sleep(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function isAddress(value) {
+  return /^0x[0-9a-fA-F]{40}$/.test(String(value || "").trim());
+}
+
+function isBytes32(value) {
+  return /^0x[0-9a-fA-F]{64}$/.test(String(value || "").trim());
+}
+
+function isZeroAddress(value) {
+  return /^0x0{40}$/.test(String(value || "").toLowerCase());
+}
+
+function sameAddr(a, b) {
+  return String(a || "").toLowerCase() === String(b || "").toLowerCase();
+}
+
+function normAddr(value) {
+  return String(value || "").trim().toLowerCase();
+}
+
+function encodeUint(value) {
+  const n = BigInt(value);
+  if (n < 0n) throw new Error("Negative values cannot be encoded.");
+  const hex = n.toString(16);
+  if (hex.length > 64) throw new Error("Integer is larger than 256 bits.");
+  return hex.padStart(64, "0");
+}
+
+function encodeAddress(value) {
+  const hex = normAddr(value).replace(/^0x/, "");
+  if (!/^[0-9a-f]{40}$/.test(hex)) throw new Error("Enter a 20-byte address.");
+  return hex.padStart(64, "0");
+}
+
+function encodeBytes32(value) {
+  const hex = String(value || "").trim().toLowerCase().replace(/^0x/, "");
+  if (!/^[0-9a-f]{64}$/.test(hex)) throw new Error("Enter a 32-byte hex id.");
+  return hex;
+}
+
+function encodeCall(selector, words) {
+  return "0x" + selector + (words || []).join("");
+}
+
+function decodeWords(hex) {
+  const body = String(hex || "").replace(/^0x/i, "");
+  if (body.length === 0) return [];
+  if (body.length % 64 !== 0) throw new Error("ABI data is not word aligned.");
+  const words = [];
+  for (let i = 0; i < body.length; i += 64) words.push(BigInt("0x" + body.slice(i, i + 64)));
+  return words;
+}
+
+function wordToAddress(word) {
+  return "0x" + BigInt(word).toString(16).padStart(64, "0").slice(-40);
+}
+
+function wordToBytes32(word) {
+  return "0x" + BigInt(word).toString(16).padStart(64, "0");
+}
+
+function decodeString(hex) {
+  const words = decodeWords(hex);
+  if (words.length < 2) return "";
+  const offset = Number(words[0] / 32n);
+  const length = Number(words[offset]);
+  if (!Number.isSafeInteger(length) || length < 0 || length > 256) return "";
+  const start = (offset + 1) * 64;
+  const body = String(hex).replace(/^0x/i, "").slice(start, start + length * 2);
+  const bytes = new Uint8Array(body.length / 2);
+  for (let i = 0; i < bytes.length; i++) bytes[i] = parseInt(body.slice(i * 2, i * 2 + 2), 16);
+  return new TextDecoder().decode(bytes);
+}
+
+function decodeSymbol(hex) {
+  const body = String(hex || "").replace(/^0x/i, "");
+  if (body.length === 64) {
+    const bytes = [];
+    for (let i = 0; i < body.length; i += 2) {
+      const value = parseInt(body.slice(i, i + 2), 16);
+      if (value === 0) break;
+      bytes.push(value);
+    }
+    const text = new TextDecoder().decode(new Uint8Array(bytes));
+    return text || "TOKEN";
+  }
+  const text = decodeString(hex);
+  return text || "TOKEN";
+}
+
+function decodeOrderBook(hex) {
+  const words = decodeWords(hex);
+  if (words.length < 2) return [];
+  const lenIndex = Number(words[0] / 32n);
+  if (!Number.isSafeInteger(lenIndex) || lenIndex >= words.length) throw new Error("Order book offset is invalid.");
+  const len = Number(words[lenIndex]);
+  if (!Number.isSafeInteger(len) || len < 0 || len > 500) throw new Error("Order book length is invalid.");
+  const orders = [];
+  for (let i = 0; i < len; i++) {
+    const base = lenIndex + 1 + i * 5;
+    if (base + 4 >= words.length) break;
+    orders.push({
+      user: wordToAddress(words[base]),
+      baseQuantity: words[base + 1],
+      price: words[base + 2],
+      nextOrderId: words[base + 3],
+      previousOrderId: words[base + 4],
+    });
+  }
+  return orders;
+}
+
+function levelsFromBook(headHex, bookHex) {
+  let id = decodeWords(headHex)[0] || 0n;
+  const levels = [];
+  for (const order of decodeOrderBook(bookHex)) {
+    if (id === 0n || order.baseQuantity === 0n || isZeroAddress(order.user)) {
+      id = 0n;
+      break;
+    }
+    levels.push({
+      id,
+      user: order.user,
+      side: null,
+      baseQuantity: order.baseQuantity,
+      price: order.price,
+      sample: false,
+    });
+    id = order.nextOrderId;
+  }
+  return { levels, truncated: id !== 0n };
+}
+
+function parseUnits(value, decimals) {
+  const text = String(value ?? "").trim();
+  if (!/^\d+(\.\d+)?$/.test(text)) {
+    throw new Error("Enter a positive number using digits and an optional decimal point.");
+  }
+  const places = Number(decimals);
+  if (!Number.isInteger(places) || places < 0 || places > 255) throw new Error("Token decimals are invalid.");
+  const [whole, frac = ""] = text.split(".");
+  if (frac.length > places) throw new Error("Too many decimal places for this token.");
+  const scale = 10n ** BigInt(places);
+  return BigInt(whole) * scale + BigInt((frac.padEnd(places, "0") || "0"));
+}
+
+function formatUnits(value, decimals, maxFrac) {
+  const places = Number(decimals);
+  const negative = value < 0n;
+  const magnitude = negative ? -value : value;
+  const scale = 10n ** BigInt(places);
+  const whole = magnitude / scale;
+  let fracText = places === 0 ? "" : (magnitude % scale).toString().padStart(places, "0");
+  const limit = maxFrac === undefined ? places : Math.min(places, maxFrac);
+  if (places > 0 && limit < places) fracText = fracText.slice(0, limit);
+  fracText = fracText.replace(/0+$/, "");
+  const text = fracText ? whole.toString() + "." + fracText : whole.toString();
+  return negative ? "-" + text : text;
+}
+
+function formatAmount(value, decimals) {
+  const places = Number(decimals);
+  const short = formatUnits(value, places, Math.min(6, places));
+  if (short === "0" && value !== 0n) return formatUnits(value, places, places);
+  return short;
+}
+
+function formatFeeRate(numerator, denominator) {
+  if (denominator === 0n) return "—";
+  const scaled = (numerator * 1000000n) / denominator;
+  return formatUnits(scaled, 4) + "% (" + numerator.toString() + "/" + denominator.toString() + ")";
+}
+
+function quoteRaw(baseRaw, priceRaw, baseDecimals) {
+  return (baseRaw * priceRaw) / (10n ** BigInt(baseDecimals));
+}
+
+function shortAddress(value) {
+  const text = String(value || "");
+  if (!isAddress(text)) return "—";
+  return text.slice(0, 6) + "…" + text.slice(-4);
+}
+
+function setBanner(text, kind) {
+  state.banner = text;
+  state.bannerKind = kind || "info";
+  const node = $("banner");
+  node.textContent = text;
+  node.className = "banner " + state.bannerKind;
+}
+
+function setStatus(text, txHash, kind) {
+  $("status").textContent = text;
+  $("status-row").className = "status " + (kind || "info");
+  const link = $("tx-link");
+  link.replaceChildren();
+  if (txHash && /^0x[0-9a-fA-F]{64}$/.test(txHash) && chain().explorerUrl) {
+    const anchor = el("a", null, "View transaction");
+    anchor.href = chain().explorerUrl.replace(/\/$/, "") + "/tx/" + txHash;
+    anchor.target = "_blank";
+    anchor.rel = "noreferrer";
+    link.appendChild(anchor);
+  }
+}
+
+function explainError(error) {
+  if (!error) return "Request failed.";
+  if (error.code === 4001 || /user rejected|user denied/i.test(error.message || "")) {
+    return "Wallet rejected the request.";
+  }
+  const decoded = decodeRevertMessage(error);
+  if (decoded) return decoded;
+  return error.message || "Request failed.";
+}
+
+function revertData(error) {
+  const data = error && (error.data || (error.error && error.error.data));
+  if (typeof data === "string") return data;
+  if (data && typeof data.data === "string") return data.data;
+  return "";
+}
+
+function decodeRevertMessage(error) {
+  const raw = revertData(error);
+  if (raw && raw.toLowerCase().startsWith("0x08c379a0")) {
+    try {
+      const text = decodeString("0x" + raw.slice(10));
+      if (text) return text;
+    } catch (ignore) { /* keep the provider message */ }
+  }
+  const message = error && error.message ? String(error.message) : "";
+  const cleaned = message.replace(/^execution reverted:?\s*/i, "");
+  if (/revert/i.test(message) && cleaned) return cleaned;
+  return "";
+}
+
+function rpcError(payload) {
+  const error = new Error((payload && payload.message) || "RPC error");
+  error.code = payload && payload.code;
+  error.data = payload && payload.data;
+  return error;
+}
+
+async function fetchRpc(method, params) {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 15000);
+  try {
+    const response = await fetch(chain().rpcUrl, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ jsonrpc: "2.0", id: 1, method, params }),
+      signal: controller.signal,
+    });
+    if (!response.ok) throw new Error("Public RPC returned HTTP " + response.status);
+    const body = await response.json();
+    if (body.error) throw rpcError(body.error);
+    return body.result;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+async function walletRpc(method, params) {
+  if (!window.ethereum) throw new Error("No injected wallet is available.");
+  return window.ethereum.request({ method, params });
+}
+
+async function rpc(method, params) {
+  if (chain().rpcUrl) {
+    try {
+      return await fetchRpc(method, params);
+    } catch (error) {
+      if (window.ethereum && state.walletChainId && sameChain(state.walletChainId)) {
+        return walletRpc(method, params);
+      }
+      throw error;
+    }
+  }
+  if (window.ethereum && state.walletChainId && sameChain(state.walletChainId)) {
+    return walletRpc(method, params);
+  }
+  throw new Error("No public RPC is configured.");
+}
+
+function sameChain(chainId) {
+  return String(chainId || "").toLowerCase() === chain().chainId.toLowerCase();
+}
+
+async function ethCall(to, data) {
+  return rpc("eth_call", [{ to, data }, "latest"]);
+}
+
+function configured() {
+  return Boolean(chain().rpcUrl) && isAddress(exchangeAddress()) && isAddress(chain().wethAddress);
+}
+
+async function probeExchange() {
+  if (!configured()) {
+    state.interfaceKind = null;
+    state.blockReason = chain().chainName + " has no MatchingOrderBook address yet. Paste the deployment to leave demo mode.";
+    return false;
+  }
+  const code = await rpc("eth_getCode", [exchangeAddress(), "latest"]);
+  if (!code || code === "0x") {
+    state.interfaceKind = null;
+    state.blockReason = "No contract code at the configured exchange address.";
+    return false;
+  }
+  let details;
+  let counter;
+  try {
+    details = await ethCall(exchangeAddress(), encodeCall(SEL.getMarketDetails, [encodeBytes32("0x" + "00".repeat(32))]));
+    counter = await ethCall(exchangeAddress(), encodeCall(SEL.orderCounter));
+  } catch (error) {
+    state.interfaceKind = null;
+    state.blockReason = "Exchange probe failed: " + explainError(error);
+    return false;
+  }
+  if (!counter || decodeWords(counter).length !== 1) {
+    state.interfaceKind = null;
+    state.blockReason = "The configured contract does not expose orderCounter().";
+    return false;
+  }
+  const words = decodeWords(details).length;
+  if (words === 8) state.interfaceKind = "fee";
+  else if (words === 5) state.interfaceKind = "plain";
+  else {
+    state.interfaceKind = null;
+    state.blockReason = "getMarketDetails returned " + words + " words, not the published market struct.";
+    return false;
+  }
+  state.blockReason = "";
+  return true;
+}
+
+function decodeMarketDetails(hex) {
+  const words = decodeWords(hex);
+  if (state.interfaceKind === "fee") {
+    if (words.length < 8) throw new Error("Market details are incomplete.");
+    return {
+      baseToken: wordToAddress(words[0]),
+      quoteToken: wordToAddress(words[1]),
+      baseMin: words[2],
+      quoteMin: words[3],
+      feeNum: words[4],
+      feeDen: words[5],
+      feeReceiver: wordToAddress(words[6]),
+      bank: wordToAddress(words[7]),
+    };
+  }
+  if (words.length < 5) throw new Error("Market details are incomplete.");
+  return {
+    baseToken: wordToAddress(words[0]),
+    quoteToken: wordToAddress(words[1]),
+    baseMin: words[2],
+    quoteMin: words[3],
+    feeNum: null,
+    feeDen: null,
+    feeReceiver: null,
+    bank: wordToAddress(words[4]),
+  };
+}
+
+async function loadTokenMeta(address) {
+  const key = normAddr(address);
+  if (state.tokenMeta.has(key)) return state.tokenMeta.get(key);
+  const [symbolHex, decimalsHex] = await Promise.all([
+    ethCall(address, encodeCall(SEL.symbol)),
+    ethCall(address, encodeCall(SEL.decimals)),
+  ]);
+  const decimals = Number(decodeWords(decimalsHex)[0]);
+  if (!Number.isInteger(decimals) || decimals < 0 || decimals > 255) throw new Error("decimals() returned an invalid value.");
+  const meta = { address: key, symbol: decodeSymbol(symbolHex), decimals };
+  state.tokenMeta.set(key, meta);
+  return meta;
+}
+
+async function readMarket(marketId) {
+  const detailsHex = await ethCall(exchangeAddress(), encodeCall(SEL.getMarketDetails, [encodeBytes32(marketId)]));
+  const details = decodeMarketDetails(detailsHex);
+  if (isZeroAddress(details.bank)) return null;
+  const [base, quote] = await Promise.all([
+    loadTokenMeta(details.baseToken),
+    loadTokenMeta(details.quoteToken),
+  ]);
+  return {
+    id: marketId.toLowerCase(),
+    label: base.symbol + "/" + quote.symbol,
+    base,
+    quote,
+    baseMin: details.baseMin,
+    quoteMin: details.quoteMin,
+    feeNum: details.feeNum,
+    feeDen: details.feeDen,
+    feeReceiver: details.feeReceiver,
+    bank: details.bank,
+    sample: false,
+  };
+}
+
+function savedIds() {
+  try {
+    const parsed = JSON.parse(localStorage.getItem(storageKey("markets")) || "[]");
+    if (!Array.isArray(parsed)) return [];
+    return parsed.filter((id) => isBytes32(id)).map((id) => id.toLowerCase());
+  } catch (ignore) {
+    return [];
+  }
+}
+
+function rememberMarket(marketId) {
+  const id = marketId.toLowerCase();
+  const ids = savedIds();
+  if (!ids.includes(id)) ids.unshift(id);
+  localStorage.setItem(storageKey("markets"), JSON.stringify(ids.slice(0, 40)));
+}
+
+function forgetMarket(marketId) {
+  const id = marketId.toLowerCase();
+  localStorage.setItem(storageKey("markets"), JSON.stringify(savedIds().filter((item) => item !== id)));
+}
+
+async function discoverMarketIds() {
+  const latest = BigInt(await rpc("eth_blockNumber", []));
+  const chunk = BigInt(APP.logChunkBlocks);
+  const topic = state.interfaceKind === "fee" ? TOPIC_MARKET_FEE : TOPIC_MARKET_PLAIN;
+  const jobs = [];
+  for (let i = 0; i < APP.logChunks; i++) {
+    const to = latest - BigInt(i) * chunk;
+    if (to < 0n) break;
+    const from = to >= chunk ? to - chunk + 1n : 0n;
+    jobs.push([from, to]);
+  }
+  state.logWindowBlocks = jobs.length * Number(chunk);
+  const ids = [];
+  let failures = 0;
+  for (let i = 0; i < jobs.length; i += 4) {
+    const group = jobs.slice(i, i + 4);
+    const results = await Promise.all(group.map(async ([from, to]) => {
+      try {
+        return await rpc("eth_getLogs", [{
+          address: exchangeAddress(),
+          fromBlock: "0x" + from.toString(16),
+          toBlock: "0x" + to.toString(16),
+          topics: [topic],
+        }]);
+      } catch (ignore) {
+        failures += 1;
+        return [];
+      }
+    }));
+    for (const logs of results) {
+      for (const log of logs || []) {
+        const words = decodeWords(log.data || "0x");
+        if (words.length) ids.push(wordToBytes32(words[0]).toLowerCase());
+      }
+    }
+  }
+  if (failures === jobs.length) throw new Error("The public RPC rejected the market log scan. Paste a market id to load one.");
+  return [...new Set(ids)];
+}
+
+function bookCalls(marketId, side) {
+  const head = encodeCall(SEL.getFirstOrderId, [encodeBytes32(marketId), encodeUint(side)]);
+  const book = encodeCall(SEL.getOrderBook, [encodeBytes32(marketId), encodeUint(side), encodeUint(APP.bookDepth)]);
+  return Promise.all([
+    ethCall(exchangeAddress(), head),
+    ethCall(exchangeAddress(), book),
+  ]).then(([headHex, bookHex]) => levelsFromBook(headHex, bookHex));
+}
+
+async function readBalance(token, account) {
+  const hex = await ethCall(token, encodeCall(SEL.balanceOf, [encodeAddress(account)]));
+  return decodeWords(hex)[0];
+}
+
+async function readAllowance(token, owner) {
+  const hex = await ethCall(token, encodeCall(SEL.allowance, [encodeAddress(owner), encodeAddress(exchangeAddress())]));
+  return decodeWords(hex)[0];
+}
+
+function selectedMarket() {
+  return state.markets.find((market) => market.id === state.marketId) || null;
+}
+
+function userOrders() {
+  const account = state.account ? normAddr(state.account) : "";
+  return state.asks.concat(state.bids).filter((order) => {
+    if (order.sample) return state.mode !== "live" && sameAddr(order.user, DEMO_TRADER);
+    return account && sameAddr(order.user, account);
+  });
+}
+
+function reservedAmounts(market) {
+  let base = 0n;
+  let quote = 0n;
+  for (const order of userOrders()) {
+    if (order.sample) continue;
+    if (order.side === SELL) base += order.baseQuantity;
+    else quote += quoteRaw(order.baseQuantity, order.price, market.base.decimals);
+  }
+  return { base, quote };
+}
+
+async function loadLiveMarket() {
+  const market = selectedMarket();
+  if (!market) {
+    state.asks = [];
+    state.bids = [];
+    state.bookTruncated = false;
+    return;
+  }
+  const [askResult, bidResult] = await Promise.all([
+    bookCalls(market.id, SELL),
+    bookCalls(market.id, BUY),
+  ]);
+  state.asks = askResult.levels.map((level) => ({ ...level, side: SELL }));
+  state.bids = bidResult.levels.map((level) => ({ ...level, side: BUY }));
+  state.bookTruncated = askResult.truncated || bidResult.truncated;
+  if (state.account && sameChain(state.walletChainId)) {
+    const [baseWallet, quoteWallet, baseAllowance, quoteAllowance, ethHex, weth] = await Promise.all([
+      readBalance(market.base.address, state.account),
+      readBalance(market.quote.address, state.account),
+      readAllowance(market.base.address, state.account),
+      readAllowance(market.quote.address, state.account),
+      rpc("eth_getBalance", [state.account, "latest"]),
+      readBalance(chain().wethAddress, state.account),
+    ]);
+    state.baseWallet = baseWallet;
+    state.quoteWallet = quoteWallet;
+    state.baseAllowance = baseAllowance;
+    state.quoteAllowance = quoteAllowance;
+    state.ethBalance = BigInt(ethHex);
+    state.wethBalance = weth;
+  } else {
+    state.baseWallet = 0n;
+    state.quoteWallet = 0n;
+    state.baseAllowance = 0n;
+    state.quoteAllowance = 0n;
+    state.ethBalance = 0n;
+    state.wethBalance = 0n;
+  }
+}
+
+function demoMarkets() {
+  const base = { address: "0x00000000000000000000000000000000000000b1", symbol: "ZZB", decimals: 18 };
+  const quote = { address: "0x00000000000000000000000000000000000000c1", symbol: "ZZQ", decimals: 6 };
+  const sampleUser = "0x00000000000000000000000000000000000000d1";
+  const price = (human) => parseUnits(human, quote.decimals);
+  const size = (human) => parseUnits(human, base.decimals);
+  const asks = [
+    ["3520", "4"],
+    ["3505", "0.8"],
+    ["3500", "1.2"],
+  ].map(([px, qty], index) => ({
+    id: BigInt(index + 1),
+    user: sampleUser,
+    side: SELL,
+    price: price(px),
+    baseQuantity: size(qty),
+    sample: true,
+  })).reverse();
+  const bids = [
+    ["3490", "2"],
+    ["3488", "1.5"],
+    ["3475", "3"],
+  ].map(([px, qty], index) => ({
+    id: BigInt(index + 11),
+    user: index === 0 ? sampleUser : "0x00000000000000000000000000000000000000d2",
+    side: BUY,
+    price: price(px),
+    baseQuantity: size(qty),
+    sample: true,
+  }));
+  return [{
+    id: "0x" + "11".repeat(32),
+    label: "ZZB/ZZQ demo",
+    base,
+    quote,
+    baseMin: size("0.01"),
+    quoteMin: parseUnits("10", 6),
+    feeNum: 30n,
+    feeDen: 10000n,
+    feeReceiver: "0x00000000000000000000000000000000000000f1",
+    bank: "0x00000000000000000000000000000000000000ba",
+    sample: true,
+    asks,
+    bids,
+  }, {
+    id: "0x" + "22".repeat(32),
+    label: "ZZB/ZZS demo",
+    base,
+    quote: { address: "0x00000000000000000000000000000000000000c2", symbol: "ZZS", decimals: 18 },
+    baseMin: size("0.1"),
+    quoteMin: parseUnits("1", 18),
+    feeNum: 1n,
+    feeDen: 1000n,
+    feeReceiver: "0x00000000000000000000000000000000000000f1",
+    bank: "0x00000000000000000000000000000000000000bb",
+    sample: true,
+    asks: [],
+    bids: [],
+  }];
+}
+
+function applyDemo() {
+  state.mode = "demo";
+  state.interfaceKind = "fee";
+  const markets = demoMarkets();
+  state.markets = markets.map((market) => ({ ...market }));
+  if (!state.marketId || !selectedMarket()) state.marketId = markets[0].id;
+  const market = selectedMarket();
+  state.asks = market.asks || [];
+  state.bids = market.bids || [];
+  state.bookTruncated = false;
+  state.baseWallet = 0n;
+  state.quoteWallet = 0n;
+  state.baseAllowance = 0n;
+  state.quoteAllowance = 0n;
+  state.ethBalance = 0n;
+  state.wethBalance = 0n;
+}
+
+async function refresh() {
+  if (state.refreshing) {
+    state.refreshQueued = true;
+    return;
+  }
+  state.refreshing = true;
+  try {
+    do {
+      state.refreshQueued = false;
+      if (state.mode === "live") await loadLiveMarket();
+      else if (state.mode === "demo") {
+        const market = selectedMarket();
+        state.asks = (market && market.asks) || [];
+        state.bids = (market && market.bids) || [];
+      }
+      render();
+    } while (state.refreshQueued);
+  } catch (error) {
+    setStatus(explainError(error), null, "error");
+  } finally {
+    state.refreshing = false;
+  }
+}
+
+function walletReady() {
+  return state.mode === "live" && state.account && sameChain(state.walletChainId);
+}
+
+function tradeIntent() {
+  const market = selectedMarket();
+  if (!market) return { ok: false, reason: "Select a market." };
+  let priceRawValue;
+  let baseRawValue;
+  try {
+    priceRawValue = parseUnits($("price-input").value, market.quote.decimals);
+    baseRawValue = parseUnits($("amount-input").value, market.base.decimals);
+  } catch (error) {
+    return { ok: false, reason: error.message };
+  }
+  if (priceRawValue === 0n || baseRawValue === 0n) return { ok: false, reason: "Price and amount must be greater than zero." };
+  const quote = quoteRaw(baseRawValue, priceRawValue, market.base.decimals);
+  if (quote === 0n) return { ok: false, reason: "The quote amount rounds down to zero at this price scale." };
+  const belowMin = baseRawValue < market.baseMin || quote < market.quoteMin;
+  const spendToken = state.side === BUY ? market.quote : market.base;
+  const required = state.side === BUY ? quote : baseRawValue;
+  const allowance = state.side === BUY ? state.quoteAllowance : state.baseAllowance;
+  return {
+    ok: true,
+    market,
+    priceRaw: priceRawValue,
+    baseRaw: baseRawValue,
+    quoteRaw: quote,
+    belowMin,
+    spendToken,
+    required,
+    allowance,
+  };
+}
+
+function renderMarketSelect() {
+  const select = $("market-select");
+  const signature = state.markets.map((market) => market.id + ":" + market.label).join("|");
+  if (signature !== state.marketSignature) {
+    select.replaceChildren();
+    if (!state.markets.length) {
+      const option = el("option", null, "No markets");
+      option.value = "";
+      select.appendChild(option);
+    }
+    for (const market of state.markets) {
+      const option = el("option", null, market.label);
+      option.value = market.id;
+      select.appendChild(option);
+    }
+    state.marketSignature = signature;
+  }
+  if (state.marketId && select.value !== state.marketId) select.value = state.marketId;
+}
+
+function depthRows(levels) {
+  let running = 0n;
+  const rows = levels.map((level) => {
+    running += level.baseQuantity;
+    return { ...level, cumulative: running };
+  });
+  const max = running;
+  return rows.map((row) => ({
+    ...row,
+    depthPct: max === 0n ? 0 : Number((row.cumulative * 10000n) / max) / 100,
+  }));
+}
+
+function renderLevel(level, className, market) {
+  const button = el("button", "level " + className);
+  button.type = "button";
+  button.setAttribute("data-price", formatUnits(level.price, market.quote.decimals, market.quote.decimals));
+  const bar = el("span", "bar");
+  bar.style.width = level.depthPct + "%";
+  const price = el("span", "px num", formatAmount(level.price, market.quote.decimals));
+  const size = el("span", "num", formatAmount(level.baseQuantity, market.base.decimals));
+  const total = el("span", "num", formatAmount(quoteRaw(level.baseQuantity, level.price, market.base.decimals), market.quote.decimals));
+  button.append(bar, price, size, total);
+  return button;
+}
+
+function renderBook() {
+  const market = selectedMarket();
+  const asks = $("asks");
+  const bids = $("bids");
+  asks.replaceChildren();
+  bids.replaceChildren();
+  if (!market) {
+    asks.appendChild(el("div", "empty", "Create a market or load a market id to see the book."));
+    $("spread").replaceChildren(el("span", null, "Spread"), el("span", "num", "—"));
+    return;
+  }
+  $("book-price-label").textContent = "Price (" + market.quote.symbol + ")";
+  $("book-size-label").textContent = "Size (" + market.base.symbol + ")";
+  $("book-total-label").textContent = "Total (" + market.quote.symbol + ")";
+  const askRows = depthRows(state.asks);
+  const bidRows = depthRows(state.bids);
+  for (const level of askRows.slice().reverse()) asks.appendChild(renderLevel(level, "ask", market));
+  for (const level of bidRows) bids.appendChild(renderLevel(level, "bid", market));
+  if (!askRows.length && !bidRows.length) {
+    asks.appendChild(el("div", "empty", "No orders on this market."));
+  }
+  const spread = $("spread");
+  spread.replaceChildren();
+  spread.appendChild(el("span", null, state.bookTruncated ? "Spread · book truncated" : "Spread"));
+  if (state.asks.length && state.bids.length) {
+    const delta = state.asks[0].price - state.bids[0].price;
+    spread.appendChild(el("span", "num", formatAmount(delta, market.quote.decimals)));
+  } else {
+    spread.appendChild(el("span", "num", "—"));
+  }
+}
+
+function balanceRow(symbol, wallet, reserved, available, allowance, decimals) {
+  const row = el("tr");
+  row.append(
+    el("td", null, symbol),
+    el("td", "num", formatAmount(wallet, decimals)),
+    el("td", "num", formatAmount(reserved, decimals)),
+    el("td", "num", formatAmount(available, decimals)),
+    el("td", "num", state.account ? formatAmount(allowance, decimals) : "—"),
+  );
+  return row;
+}
+
+function renderBalances() {
+  const body = $("balance-body");
+  const market = selectedMarket();
+  body.replaceChildren();
+  if (!market) {
+    body.appendChild(el("tr")).appendChild(el("td", null, "No market selected."));
+    return;
+  }
+  if (!state.account) {
+    const row = el("tr");
+    const cell = el("td", null, "Connect a wallet on " + chain().chainName + " to read balances.");
+    cell.colSpan = 5;
+    row.appendChild(cell);
+    body.appendChild(row);
+    return;
+  }
+  const reserved = reservedAmounts(market);
+  body.append(
+    balanceRow(market.base.symbol, state.baseWallet, reserved.base, state.baseWallet, state.baseAllowance, market.base.decimals),
+    balanceRow(market.quote.symbol, state.quoteWallet, reserved.quote, state.quoteWallet, state.quoteAllowance, market.quote.decimals),
+  );
+  $("eth-balance").textContent = "ETH " + formatAmount(state.ethBalance, 18);
+  $("weth-balance").textContent = "WETH " + formatAmount(state.wethBalance, 18);
+}
+
+function renderOrders() {
+  const body = $("orders-body");
+  const market = selectedMarket();
+  body.replaceChildren();
+  const orders = userOrders();
+  if (!market) {
+    const row = el("tr");
+    const cell = el("td", null, "No market selected.");
+    cell.colSpan = 5;
+    row.appendChild(cell);
+    body.appendChild(row);
+    return;
+  }
+  if (!orders.length) {
+    const row = el("tr");
+    const cell = el("td", null, state.account || state.mode === "demo" ? "No active orders in the loaded book." : "Connect a wallet to see your orders.");
+    cell.colSpan = 5;
+    row.appendChild(cell);
+    body.appendChild(row);
+    return;
+  }
+  for (const order of orders) {
+    const row = el("tr");
+    const sideCell = el("td", order.side === BUY ? "buy" : "sell", order.side === BUY ? "Buy" : "Sell");
+    const reserved = order.side === BUY
+      ? formatAmount(quoteRaw(order.baseQuantity, order.price, market.base.decimals), market.quote.decimals) + " " + market.quote.symbol
+      : formatAmount(order.baseQuantity, market.base.decimals) + " " + market.base.symbol;
+    const cancel = el("button", "btn", order.sample ? "Demo" : "Cancel");
+    cancel.type = "button";
+    cancel.disabled = state.mode !== "live" || !walletReady() || state.txLock || order.sample;
+    if (!order.sample) {
+      cancel.setAttribute("data-order-id", order.id.toString());
+      cancel.setAttribute("data-side", String(order.side));
+    }
+    const actionCell = el("td");
+    actionCell.appendChild(cancel);
+    row.append(
+      sideCell,
+      el("td", "num", formatAmount(order.price, market.quote.decimals)),
+      el("td", "num", formatAmount(order.baseQuantity, market.base.decimals) + " " + market.base.symbol),
+      el("td", "num", reserved),
+      actionCell,
+    );
+    body.appendChild(row);
+  }
+}
+
+function renderMeta() {
+  const market = selectedMarket();
+  const meta = $("market-meta");
+  if (!market) {
+    meta.textContent = "No market";
+    $("min-label").textContent = "Minimum post —";
+    $("fee-label").textContent = "Market fee —";
+    document.title = "ZigZag Exchange";
+    return;
+  }
+  document.title = market.label + " — ZigZag";
+  const minBase = formatAmount(market.baseMin, market.base.decimals) + " " + market.base.symbol;
+  const minQuote = formatAmount(market.quoteMin, market.quote.decimals) + " " + market.quote.symbol;
+  meta.textContent = "Min " + minBase + " · " + minQuote;
+  $("min-label").textContent = "Minimum post " + minBase + " and " + minQuote;
+  if (market.feeNum === null) $("fee-label").textContent = "Market fee is not stored on this deployment.";
+  else $("fee-label").textContent = "Market fee " + formatFeeRate(market.feeNum, market.feeDen) + " to " + shortAddress(market.feeReceiver);
+}
+
+function renderChainSelect() {
+  const select = $("chain-select");
+  if (!select.options.length) {
+    for (const item of CHAINS) {
+      const option = el("option", null, item.chainName);
+      option.value = item.key;
+      select.appendChild(option);
+    }
+  }
+  if (select.value !== chain().key) select.value = chain().key;
+  const exchangeInput = $("exchange-address");
+  if (exchangeInput && document.activeElement !== exchangeInput) exchangeInput.value = exchangeAddress();
+  $("exchange-hint").textContent = state.mode === "live"
+    ? "Approvals spend through this exchange on " + chain().chainName + "."
+    : exchangeAddress()
+      ? "This address is not a MatchingOrderBook on " + chain().chainName + ". Transactions stay disabled."
+      : "No MatchingOrderBook address is published for " + chain().chainName + ". Paste a deployment before any approval or trade.";
+  $("weth-contract").textContent = "WETH " + chain().wethAddress;
+}
+
+function renderWallet() {
+  const button = $("wallet-button");
+  const network = $("network-label");
+  if (!window.ethereum) {
+    network.textContent = "No wallet";
+    button.textContent = "No wallet";
+    return;
+  }
+  if (!state.walletChainId) network.textContent = "Wallet";
+  else if (sameChain(state.walletChainId)) network.textContent = chain().chainName;
+  else network.textContent = "Wrong network";
+  if (!state.account) button.textContent = "Connect wallet";
+  else {
+    button.textContent = shortAddress(state.account);
+    button.title = state.account;
+  }
+}
+
+function updateTradeState() {
+  const intent = tradeIntent();
+  const live = walletReady();
+  const message = $("form-message");
+  const place = $("place-button");
+  const approve = $("approve-button");
+  const reset = $("reset-allowance");
+  const fokRow = $("fok-row");
+  place.className = "btn " + (state.side === BUY ? "buy" : "sell");
+  const market = selectedMarket();
+  place.textContent = market ? (state.side === BUY ? "Buy " : "Sell ") + market.base.symbol : "Place order";
+  if (!intent.ok) {
+    $("total-output").textContent = "Total —";
+    message.textContent = $("price-input").value || $("amount-input").value ? intent.reason : "";
+    fokRow.hidden = true;
+    approve.disabled = true;
+    approve.textContent = "Approve";
+    reset.hidden = true;
+    place.disabled = true;
+  } else {
+    $("total-output").textContent = "Total " + formatAmount(intent.quoteRaw, intent.market.quote.decimals) + " " + intent.market.quote.symbol;
+    fokRow.hidden = !intent.belowMin;
+    const fokOk = !intent.belowMin || $("fok-check").checked;
+    const enough = intent.allowance >= intent.required;
+    approve.textContent = enough ? "Approved" : "Approve " + intent.spendToken.symbol;
+    approve.disabled = !live || state.txLock || enough;
+    reset.hidden = !(live && intent.allowance > 0n && intent.allowance < intent.required);
+    place.disabled = !live || state.txLock || !enough || !fokOk;
+    if (!live) message.textContent = state.mode === "demo" ? "Demo data only. Orders are not sent." : "Connect a wallet on " + chain().chainName + " to trade.";
+    else if (!enough) message.textContent = "Allowance is below this order. The spender is the exchange contract.";
+    else if (!fokOk) message.textContent = "This order is below the minimum post size.";
+    else message.textContent = "";
+    $("allowance-label").textContent = "Allowance " + formatAmount(intent.allowance, intent.spendToken.decimals) + " " + intent.spendToken.symbol;
+  }
+  if (!intent.ok) {
+    const marketNow = selectedMarket();
+    $("allowance-label").textContent = marketNow && state.account
+      ? "Allowance " + formatAmount(state.side === BUY ? state.quoteAllowance : state.baseAllowance, (state.side === BUY ? marketNow.quote : marketNow.base).decimals)
+      : "Allowance —";
+  }
+  $("spender-label").textContent = state.mode === "live"
+    ? "Spender " + exchangeAddress()
+    : "Spender is unset while transactions are disabled.";
+  const wrapAmount = $("wrap-amount").value.trim();
+  let wrapOk = false;
+  if (wrapAmount) {
+    try { wrapOk = parseUnits(wrapAmount, 18) > 0n; } catch (ignore) { wrapOk = false; }
+  }
+  $("wrap-button").disabled = !live || state.txLock || !wrapOk;
+  $("unwrap-button").disabled = !live || state.txLock || !wrapOk;
+  $("compute-id").disabled = state.mode !== "live" || state.txLock;
+  $("create-market").disabled = state.mode !== "live" || state.txLock;
+  $("load-market-id").disabled = state.mode !== "live" || state.txLock;
+  $("forget-market").disabled = state.mode !== "live" || !state.marketId;
+  const feeInputs = [$("fee-num"), $("fee-den"), $("fee-receiver")];
+  for (const input of feeInputs) input.disabled = state.interfaceKind === "plain";
+}
+
+function renderNotes() {
+  const items = [
+    "Calls target MatchingOrderBook in github.com/k26dr/solidity-dex. Robinhood Chain and Ethereum are the supported networks. That repository does not publish an exchange address for either chain, so trading stays disabled until you paste a deployment.",
+    "Market ids come from the contract’s getMarketId view. The page never substitutes a browser hash.",
+    "There is no on-chain market index. The public RPC returns at most " + APP.logChunkBlocks + " blocks of logs per request, so the selector scans the last " + (state.logWindowBlocks || APP.logChunkBlocks * APP.logChunks) + " blocks plus ids saved in this browser. Older markets can be loaded by id.",
+    "Order books are read with getOrderBook at depth " + APP.bookDepth + ". Deeper resting orders are not shown and cannot be cancelled here.",
+    "The fee-bearing contract stores fee numerator, denominator, and receiver inside the market id. Its placeOrder and cancelOrder functions do not transfer that fee.",
+    state.interfaceKind === "plain"
+      ? "This deployment’s market struct has no fee fields. Fee inputs are disabled and are not part of getMarketId."
+      : "A deployment whose getMarketDetails struct does not match either published MatchingOrderBook leaves trading disabled.",
+  ];
+  if (state.blockReason) items.unshift(state.blockReason);
+  const list = $("notes");
+  list.replaceChildren();
+  for (const item of items) list.appendChild(el("li", null, item));
+}
+
+function render() {
+  setBanner(state.banner, state.bannerKind);
+  renderChainSelect();
+  renderWallet();
+  renderMarketSelect();
+  renderMeta();
+  renderBook();
+  renderBalances();
+  renderOrders();
+  renderNotes();
+  updateTradeState();
+}
+
+async function boot() {
+  stopPolling();
+  state.mode = "loading";
+  state.markets = [];
+  state.marketSignature = "";
+  state.tokenMeta = new Map();
+  setBanner("Loading " + chain().chainName + "…", "info");
+  try {
+    if (window.ethereum) {
+      try { state.walletChainId = await walletRpc("eth_chainId"); } catch (ignore) { state.walletChainId = null; }
+      try {
+        const accounts = await walletRpc("eth_accounts");
+        state.account = accounts && accounts[0] ? accounts[0] : null;
+      } catch (ignore) { state.account = null; }
+    }
+    const ok = await probeExchange();
+    if (!ok) {
+      applyDemo();
+      setBanner("Demo data. " + state.blockReason + " Transaction buttons stay disabled.", "warn");
+      setStatus("Viewing labeled demo markets. No order will be submitted.", null, "warn");
+      render();
+      return;
+    }
+    state.mode = "live";
+    const discovered = new Set(savedIds());
+    let scanFailed = false;
+    try {
+      for (const id of await discoverMarketIds()) discovered.add(id);
+    } catch (error) {
+      scanFailed = true;
+      setStatus("Market log scan failed: " + explainError(error) + " Paste a market id to load one.", null, "warn");
+    }
+    const markets = [];
+    for (const id of discovered) {
+      try {
+        const market = await readMarket(id);
+        if (market) markets.push(market);
+      } catch (ignore) { /* skip undecodable markets */ }
+    }
+    markets.sort((a, b) => a.label.localeCompare(b.label));
+    state.markets = markets;
+    const stored = localStorage.getItem(storageKey("selected"));
+    state.marketId = markets.some((market) => market.id === stored) ? stored : (markets[0] ? markets[0].id : null);
+    const feeNote = state.interfaceKind === "plain"
+      ? " This deployment has no fee fields on the market."
+      : " Fee fields are stored on the market id.";
+    setBanner(chain().chainName + " · public RPC · exchange " + shortAddress(exchangeAddress()) + "." + feeNote, "ok");
+    if (!scanFailed && !markets.length) {
+      setStatus("No markets in the last " + state.logWindowBlocks + " blocks. Create a market or paste a market id.", null, "info");
+    }
+    await refresh();
+    startPolling();
+  } catch (error) {
+    applyDemo();
+    state.blockReason = explainError(error);
+    setBanner("Demo data. " + state.blockReason + " Transaction buttons stay disabled.", "warn");
+    setStatus("Could not reach the exchange. Demo markets are on screen and nothing is sent on-chain.", null, "warn");
+    render();
+  }
+}
+
+function startPolling() {
+  stopPolling();
+  if (state.mode !== "live") return;
+  state.pollTimer = setInterval(() => {
+    if (document.visibilityState === "hidden" || state.txLock) return;
+    refresh();
+  }, APP.pollMs);
+}
+
+function stopPolling() {
+  if (state.pollTimer) clearInterval(state.pollTimer);
+  state.pollTimer = null;
+}
+
+async function connectWallet() {
+  if (!window.ethereum) {
+    setStatus("No injected wallet. Install a browser wallet to trade. Market viewing uses the public RPC.", null, "warn");
+    return;
+  }
+  try {
+    const accounts = await walletRpc("eth_requestAccounts");
+    state.account = accounts && accounts[0] ? accounts[0] : null;
+    state.walletChainId = await walletRpc("eth_chainId");
+    renderWallet();
+    if (!sameChain(state.walletChainId)) {
+      setStatus("Wrong network. Switch to " + chain().chainName + ".", null, "warn");
+      return;
+    }
+    await refresh();
+  } catch (error) {
+    setStatus(explainError(error), null, "error");
+  }
+}
+
+async function switchNetwork() {
+  if (!window.ethereum) return;
+  try {
+    await walletRpc("wallet_switchEthereumChain", [{ chainId: chain().chainId }]);
+  } catch (error) {
+    if (error && error.code === 4902) {
+      await walletRpc("wallet_addEthereumChain", [{
+        chainId: chain().chainId,
+        chainName: chain().chainName,
+        nativeCurrency: { name: "Ether", symbol: "ETH", decimals: 18 },
+        rpcUrls: [chain().rpcUrl],
+        blockExplorerUrls: [chain().explorerUrl],
+      }]);
+      return;
+    }
+    throw error;
+  }
+}
+
+async function onWalletClick() {
+  if (!window.ethereum) {
+    setStatus("No injected wallet found.", null, "warn");
+    return;
+  }
+  if (!state.account) return connectWallet();
+  if (!sameChain(state.walletChainId)) {
+    try {
+      await switchNetwork();
+    } catch (error) {
+      setStatus(explainError(error), null, "error");
+    }
+    return;
+  }
+  setStatus("Connected as " + state.account + " on " + chain().chainName + ".", null, "ok");
+}
+
+function assertLive() {
+  if (state.mode !== "live") throw new Error("Transactions are disabled until the exchange contract is reachable.");
+}
+
+function runAction(fn) {
+  if (state.txLock) return;
+  if (state.mode !== "live") {
+    setStatus("Transactions are disabled. Demo data is not sent on-chain.", null, "warn");
+    return;
+  }
+  state.txLock = true;
+  updateTradeState();
+  Promise.resolve()
+    .then(fn)
+    .catch((error) => setStatus(explainError(error), null, "error"))
+    .finally(() => {
+      state.txLock = false;
+      updateTradeState();
+    });
+}
+
+async function requireAccount() {
+  assertLive();
+  if (!window.ethereum) throw new Error("No injected wallet found.");
+  const accounts = await walletRpc("eth_requestAccounts");
+  const account = accounts && accounts[0];
+  if (!account) throw new Error("The wallet did not return an account.");
+  const chainId = await walletRpc("eth_chainId");
+  state.account = account;
+  state.walletChainId = chainId;
+  if (!sameChain(chainId)) throw new Error("Wrong network. Switch to " + chain().chainName + ".");
+  return account;
+}
+
+async function simulate(from, to, data, value) {
+  try {
+    await rpc("eth_call", [{ from, to, data, value: "0x" + value.toString(16) }, "latest"]);
+  } catch (error) {
+    const reason = decodeRevertMessage(error);
+    if (reason || /revert/i.test(error.message || "")) throw new Error(reason || explainError(error));
+    throw error;
+  }
+}
+
+async function waitReceipt(hash) {
+  const started = Date.now();
+  while (Date.now() - started < 120000) {
+    const receipt = await rpc("eth_getTransactionReceipt", [hash]);
+    if (receipt) return receipt;
+    await sleep(1500);
+  }
+  throw new Error("Timed out waiting for the transaction receipt.");
+}
+
+async function sendTx(to, data, value) {
+  const from = await requireAccount();
+  await simulate(from, to, data, value);
+  setStatus("Waiting for the wallet signature…", null, "info");
+  const hash = await walletRpc("eth_sendTransaction", [{
+    from,
+    to,
+    data,
+    value: "0x" + value.toString(16),
+  }]);
+  setStatus("Waiting for confirmation…", hash, "info");
+  const receipt = await waitReceipt(hash);
+  if (!receipt || receipt.status === "0x0") throw new Error("Transaction reverted.");
+  setStatus("Transaction confirmed.", hash, "ok");
+  return receipt;
+}
+
+async function approveSpend(amount) {
+  const intent = tradeIntent();
+  if (!intent.ok) throw new Error(intent.reason);
+  const raw = amount === 0n ? 0n : intent.required;
+  const data = encodeCall(SEL.approve, [encodeAddress(exchangeAddress()), encodeUint(raw)]);
+  await sendTx(intent.spendToken.address, data, 0n);
+  const fresh = await readAllowance(intent.spendToken.address, state.account);
+  if (intent.side === BUY) state.quoteAllowance = fresh;
+  else state.baseAllowance = fresh;
+  await refresh();
+}
+
+async function placeOrder() {
+  const intent = tradeIntent();
+  if (!intent.ok) throw new Error(intent.reason);
+  if (intent.belowMin && !$("fok-check").checked) throw new Error("Confirm fill-or-kill before placing an order below the minimum.");
+  const fresh = await readAllowance(intent.spendToken.address, await requireAccount());
+  if (fresh < intent.required) throw new Error("Approval is not confirmed for this amount yet.");
+  const data = encodeCall(SEL.placeOrder, [
+    encodeBytes32(intent.market.id),
+    encodeUint(state.side),
+    encodeUint(intent.baseRaw),
+    encodeUint(intent.priceRaw),
+  ]);
+  await sendTx(exchangeAddress(), data, 0n);
+  await refresh();
+}
+
+async function cancelOrder(side, orderId) {
+  const market = selectedMarket();
+  if (!market) throw new Error("Select a market.");
+  const data = encodeCall(SEL.cancelOrder, [
+    encodeBytes32(market.id),
+    encodeUint(side),
+    encodeUint(orderId),
+  ]);
+  await sendTx(exchangeAddress(), data, 0n);
+  await refresh();
+}
+
+async function wrap(direction) {
+  const amount = parseUnits($("wrap-amount").value, 18);
+  if (amount === 0n) throw new Error("Enter an ETH amount.");
+  if (direction === "wrap") await sendTx(chain().wethAddress, encodeCall(SEL.deposit), amount);
+  else await sendTx(chain().wethAddress, encodeCall(SEL.withdraw, [encodeUint(amount)]), 0n);
+  await refresh();
+}
+
+async function generatorInputs() {
+  const base = normAddr($("base-asset").value);
+  const quote = normAddr($("quote-asset").value);
+  if (!isAddress(base) || !isAddress(quote)) throw new Error("Enter base and quote token addresses.");
+  if (isZeroAddress(base) || isZeroAddress(quote)) throw new Error("Token address cannot be the zero address.");
+  const [baseMeta, quoteMeta] = await Promise.all([loadTokenMeta(base), loadTokenMeta(quote)]);
+  const baseMin = parseUnits($("min-base").value, baseMeta.decimals);
+  const quoteMin = parseUnits($("min-quote").value, quoteMeta.decimals);
+  if (state.interfaceKind === "plain") {
+    return { base, quote, baseMin, quoteMin, fee: false };
+  }
+  if (!/^\d+$/.test($("fee-num").value.trim()) || !/^\d+$/.test($("fee-den").value.trim())) {
+    throw new Error("Fee numerator and denominator must be whole numbers.");
+  }
+  const feeNum = BigInt($("fee-num").value.trim());
+  const feeDen = BigInt($("fee-den").value.trim());
+  const receiver = normAddr($("fee-receiver").value);
+  if (!isAddress(receiver)) throw new Error("Enter a fee receiver address.");
+  return { base, quote, baseMin, quoteMin, feeNum, feeDen, receiver, fee: true };
+}
+
+async function computeMarketId() {
+  assertLive();
+  const input = await generatorInputs();
+  const words = input.fee
+    ? [encodeAddress(input.base), encodeAddress(input.quote), encodeUint(input.baseMin), encodeUint(input.quoteMin), encodeUint(input.feeNum), encodeUint(input.feeDen), encodeAddress(input.receiver)]
+    : [encodeAddress(input.base), encodeAddress(input.quote), encodeUint(input.baseMin), encodeUint(input.quoteMin)];
+  const selector = input.fee ? SEL.getMarketIdFee : SEL.getMarketIdPlain;
+  const hex = await ethCall(exchangeAddress(), encodeCall(selector, words));
+  const id = wordToBytes32(decodeWords(hex)[0]);
+  $("market-id-output").textContent = id;
+  $("market-id-input").value = id;
+  setStatus(input.fee
+    ? "Market id returned by getMarketId. Creating the market requires the fee numerator to be below the denominator."
+    : "This deployment’s getMarketId does not include a fee rate or fee receiver.", null, "ok");
+  return { id, input };
+}
+
+async function createMarket() {
+  const computed = await computeMarketId();
+  const input = computed.input;
+  if (input.fee && input.feeNum >= input.feeDen) {
+    throw new Error("Fee numerator must be less than the denominator.");
+  }
+  const words = input.fee
+    ? [encodeAddress(input.base), encodeAddress(input.quote), encodeUint(input.baseMin), encodeUint(input.quoteMin), encodeUint(input.feeNum), encodeUint(input.feeDen), encodeAddress(input.receiver)]
+    : [encodeAddress(input.base), encodeAddress(input.quote), encodeUint(input.baseMin), encodeUint(input.quoteMin)];
+  const selector = input.fee ? SEL.createMarketFee : SEL.createMarketPlain;
+  const receipt = await sendTx(exchangeAddress(), encodeCall(selector, words), 0n);
+  let id = computed.id;
+  const topic = input.fee ? TOPIC_MARKET_FEE : TOPIC_MARKET_PLAIN;
+  for (const log of receipt.logs || []) {
+    if ((log.topics || [])[0] && log.topics[0].toLowerCase() === topic && log.data) {
+      const wordsOut = decodeWords(log.data);
+      if (wordsOut.length) id = wordToBytes32(wordsOut[0]);
+    }
+  }
+  rememberMarket(id);
+  const market = await readMarket(id);
+  if (market) {
+    state.markets = state.markets.filter((item) => item.id !== id).concat(market);
+    state.marketId = id;
+    localStorage.setItem(storageKey("selected"), id);
+  }
+  $("market-id-output").textContent = id;
+  await refresh();
+}
+
+async function loadTypedMarket() {
+  assertLive();
+  const id = $("market-id-input").value.trim();
+  if (!isBytes32(id)) throw new Error("Enter a 32-byte market id.");
+  const market = await readMarket(id);
+  if (!market) throw new Error("That market id is not created. The bank address is empty.");
+  rememberMarket(market.id);
+  state.markets = state.markets.filter((item) => item.id !== market.id).concat(market);
+  state.marketId = market.id;
+  localStorage.setItem(storageKey("selected"), market.id);
+  await refresh();
+  setStatus("Loaded " + market.label + ".", null, "ok");
+}
+
+function bind() {
+  $("market-select").addEventListener("change", () => {
+    state.marketId = $("market-select").value || null;
+    if (state.marketId) localStorage.setItem(storageKey("selected"), state.marketId);
+    refresh();
+  });
+  $("wallet-button").addEventListener("click", () => onWalletClick());
+  $("side-buy").addEventListener("click", () => { state.side = BUY; $("side-buy").classList.add("is-active"); $("side-sell").classList.remove("is-active"); updateTradeState(); });
+  $("side-sell").addEventListener("click", () => { state.side = SELL; $("side-sell").classList.add("is-active"); $("side-buy").classList.remove("is-active"); updateTradeState(); });
+  for (const id of ["price-input", "amount-input", "wrap-amount"]) $(id).addEventListener("input", updateTradeState);
+  $("fok-check").addEventListener("change", updateTradeState);
+  $("max-amount").addEventListener("click", () => {
+    const market = selectedMarket();
+    const intentPrice = $("price-input").value;
+    if (!market || !state.account) return;
+    try {
+      if (state.side === SELL) $("amount-input").value = formatUnits(state.baseWallet, market.base.decimals, market.base.decimals);
+      else {
+        const price = parseUnits(intentPrice, market.quote.decimals);
+        if (price === 0n) throw new Error("Enter a price before using the quote balance.");
+        const scale = 10n ** BigInt(market.base.decimals);
+        const base = (state.quoteWallet * scale) / price;
+        $("amount-input").value = formatUnits(base, market.base.decimals, market.base.decimals);
+      }
+      updateTradeState();
+    } catch (error) {
+      $("form-message").textContent = error.message;
+    }
+  });
+  $("book-rows").addEventListener("click", (event) => {
+    const row = event.target.closest("[data-price]");
+    if (!row) return;
+    $("price-input").value = row.getAttribute("data-price");
+    updateTradeState();
+  });
+  $("orders-body").addEventListener("click", (event) => {
+    const button = event.target.closest("button[data-order-id]");
+    if (!button || button.disabled) return;
+    runAction(() => cancelOrder(button.getAttribute("data-side"), button.getAttribute("data-order-id")));
+  });
+  $("approve-button").addEventListener("click", () => runAction(() => approveSpend()));
+  $("reset-allowance").addEventListener("click", () => runAction(() => approveSpend(0n)));
+  $("place-button").addEventListener("click", () => runAction(() => placeOrder()));
+  $("wrap-button").addEventListener("click", () => runAction(() => wrap("wrap")));
+  $("unwrap-button").addEventListener("click", () => runAction(() => wrap("unwrap")));
+  $("compute-id").addEventListener("click", () => runAction(() => computeMarketId()));
+  $("create-market").addEventListener("click", () => runAction(() => createMarket()));
+  $("load-market-id").addEventListener("click", () => runAction(() => loadTypedMarket()));
+  $("forget-market").addEventListener("click", () => {
+    if (!state.marketId || state.mode !== "live") return;
+    forgetMarket(state.marketId);
+    state.markets = state.markets.filter((market) => market.id !== state.marketId);
+    state.marketId = state.markets[0] ? state.markets[0].id : null;
+    refresh();
+  });
+  $("retry-button").addEventListener("click", () => boot());
+  $("chain-select").addEventListener("change", () => {
+    if (state.txLock) {
+      $("chain-select").value = chain().key;
+      return;
+    }
+    state.chainKey = $("chain-select").value;
+    localStorage.setItem("zigzag-exchange-v1:chain", state.chainKey);
+    boot();
+  });
+  $("use-exchange").addEventListener("click", () => {
+    const value = $("exchange-address").value.trim();
+    if (!isAddress(value)) {
+      setStatus("Enter the MatchingOrderBook address for " + chain().chainName + ".", null, "warn");
+      return;
+    }
+    localStorage.setItem(storageKey("exchange"), normAddr(value));
+    boot();
+  });
+  $("clear-exchange").addEventListener("click", () => {
+    localStorage.removeItem(storageKey("exchange"));
+    $("exchange-address").value = "";
+    boot();
+  });
+  if (window.ethereum) {
+    if (window.ethereum.on) {
+      window.ethereum.on("accountsChanged", (accounts) => {
+        state.account = accounts && accounts[0] ? accounts[0] : null;
+        refresh();
+      });
+      window.ethereum.on("chainChanged", (chainId) => {
+        state.walletChainId = chainId;
+        if (state.mode === "live" && !sameChain(chainId)) {
+          setStatus("Wrong network. Switch to " + chain().chainName + ".", null, "warn");
+        }
+        renderWallet();
+        refresh();
+      });
+    }
+  }
+  document.addEventListener("visibilitychange", () => {
+    if (document.visibilityState === "visible" && state.mode === "live") refresh();
+  });
+}
+
+bind();
+boot();
+</script>
+</body>
+</html>
