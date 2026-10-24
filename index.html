@@ -1,4 +1,5 @@
 <!DOCTYPE html>
+<!-- SPDX-License-Identifier: MIT -->
 <html lang="en">
 <head>
 <meta charset="utf-8">
@@ -23,7 +24,7 @@
   }
   * { box-sizing: border-box; }
   [hidden] { display: none !important; }
-  html, body { margin: 0; min-height: 100%; background: var(--bg); color: var(--text); }
+  html, body { margin: 0; height: 100%; background: var(--bg); color: var(--text); }
   body {
     font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
     font-size: 13px;
@@ -37,7 +38,7 @@
     outline-offset: 1px;
   }
   .num { font-variant-numeric: tabular-nums; font-feature-settings: "tnum" 1; }
-  .page { min-height: 100vh; display: flex; flex-direction: column; }
+  .page { height: 100vh; min-height: 100vh; display: flex; flex-direction: column; }
   header {
     display: flex;
     align-items: center;
@@ -50,16 +51,13 @@
   .brand svg { color: var(--accent); display: block; }
   .brand-name { font-weight: 650; letter-spacing: 0.02em; }
   .brand-version { color: var(--muted); font-size: 11px; }
-  .market-picker { display: flex; align-items: center; gap: 10px; flex: 1; min-width: 0; }
-  .market-picker select { max-width: 280px; width: 100%; }
-  .meta { color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .wallet-box { display: flex; align-items: center; gap: 8px; margin-left: auto; }
-.wallet-box select, .market-picker select {
-  background: var(--panel);
-  border: 1px solid var(--line-strong);
-  border-radius: 4px;
-  padding: 6px 8px;
-}
+  .wallet-box select {
+    background: var(--panel);
+    border: 1px solid var(--line-strong);
+    border-radius: 4px;
+    padding: 6px 8px;
+  }
   #network-label { color: var(--muted); font-size: 12px; }
   #wallet-button, .btn {
     border-radius: 4px;
@@ -78,9 +76,10 @@
   .banner.error, .status.error { background: #2a161b; color: #ffb3bd; }
   .banner.ok, .status.ok { background: #12241c; color: #9ee0c2; }
   .status { display: flex; gap: 12px; align-items: baseline; }
-  .status a { color: var(--accent); }
-  main { display: flex; flex-direction: column; gap: 12px; padding: 12px; }
+  .status a, td a { color: var(--accent); }
+  main { flex: 1; min-height: 0; display: flex; flex-direction: column; gap: 12px; padding: 12px; overflow: auto; }
   .trade-row, .lower-row { display: flex; gap: 12px; align-items: stretch; }
+  .trade-row { flex: 1 1 auto; }
   .panel {
     background: var(--panel);
     border: 1px solid var(--line);
@@ -101,9 +100,24 @@
   }
   .panel .body { padding: 10px; display: flex; flex-direction: column; gap: 8px; }
   .form-panel { flex: 0 0 340px; }
-  .book-panel { flex: 1; }
+  .market-panel { flex: 0 0 180px; }
+  .book-panel { flex: 1 1 240px; min-width: 240px; min-height: 0; }
+  .market-choice {
+    display: block;
+    width: 100%;
+    text-align: left;
+    background: transparent;
+    border: 0;
+    border-bottom: 1px solid var(--line);
+    padding: 8px 10px;
+  }
+  .market-choice:hover { background: var(--hover); }
+  .market-choice.is-active { background: var(--hover); color: var(--accent); box-shadow: inset 2px 0 0 var(--accent); }
+  .market-meta { color: var(--muted); font-size: 11px; padding: 8px 10px; }
   .lower-row { flex-wrap: wrap; }
   .lower-row > .panel { flex: 1 1 360px; }
+  .fills-panel { flex: 1 1 100%; }
+  td.you { color: var(--accent); }
   .side-toggle { display: flex; gap: 6px; }
   .side-toggle button { flex: 1; border: 1px solid var(--line-strong); background: transparent; padding: 7px; border-radius: 4px; }
   .side-toggle button.buy.is-active { background: var(--bid); border-color: var(--bid); color: #04140e; font-weight: 650; }
@@ -130,7 +144,7 @@
   .check input { width: auto; }
   .wrap-box { border-top: 1px solid var(--line); padding-top: 8px; display: flex; flex-direction: column; gap: 8px; }
   .wrap-actions { display: flex; gap: 6px; }
-  .wrap-actions button, .tool-actions { flex: 1; }
+  .wrap-actions button { flex: 1; }
   .book-head, .level {
     display: flex;
     gap: 8px;
@@ -140,14 +154,15 @@
   .book-head span, .level span { flex: 1; text-align: right; position: relative; }
   .book-head span:first-child, .level span:first-child { text-align: left; }
   .book-scroll {
-    min-height: 320px;
-    max-height: 640px;
+    flex: 1 1 auto;
+    min-height: 0;
     overflow: auto;
     display: flex;
     flex-direction: column;
   }
-  #asks:not(:empty) { margin-top: auto; }
-  .level { position: relative; width: 100%; border: 0; background: transparent; color: inherit; padding: 3px 10px; text-align: inherit; }
+  #asks { margin-top: auto; }
+  .book-head, .level { font-size: 11px; gap: 4px; padding-left: 6px; padding-right: 6px; }
+  .level { position: relative; width: 100%; border: 0; background: transparent; color: inherit; padding-top: 1px; padding-bottom: 1px; text-align: inherit; }
   .level:hover { background: var(--hover); }
   .level .bar { position: absolute; top: 1px; bottom: 1px; right: 0; opacity: 0.22; pointer-events: none; }
   .level.ask .bar { background: var(--ask); }
@@ -170,32 +185,16 @@
   td.buy { color: var(--bid); }
   td.sell { color: var(--ask); }
   .empty { color: var(--muted); padding: 12px; }
-  .tools .grid { display: flex; flex-wrap: wrap; gap: 8px; }
-  .tools label { flex: 1 1 180px; }
-  .tool-actions { display: flex; gap: 8px; flex-wrap: wrap; }
-  .id-out {
-    word-break: break-all;
-    background: var(--bg);
-    border: 1px solid var(--line);
-    border-radius: 4px;
-    padding: 8px;
-    min-height: 34px;
-    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-    font-size: 12px;
-  }
-  .notes { color: var(--muted); font-size: 12px; }
-  .notes summary { cursor: pointer; color: var(--text); }
-  .notes li { margin: 4px 0; }
   ::-webkit-scrollbar { width: 12px; height: 12px; }
   ::-webkit-scrollbar-track { background: #2d313c; }
   ::-webkit-scrollbar-thumb { background: #5b5f67; }
   @media (max-width: 960px) {
     header { flex-wrap: wrap; }
     .wallet-box { margin-left: 0; }
-    .meta { white-space: normal; }
     .trade-row, .lower-row { flex-direction: column; }
-    .form-panel { flex-basis: auto; }
-    .book-scroll { min-height: 320px; max-height: 520px; }
+    .trade-row { flex: none; min-height: 0; }
+    .form-panel, .market-panel, .book-panel { flex-basis: auto; width: 100%; min-width: 0; }
+    .book-scroll { min-height: 280px; }
   }
 </style>
 </head>
@@ -208,10 +207,6 @@
       </svg>
       <span class="brand-name">ZigZag</span>
       <span class="brand-version">V1</span>
-    </div>
-    <div class="market-picker">
-      <select id="market-select" aria-label="Market"></select>
-      <div class="meta num" id="market-meta">Select a market</div>
     </div>
     <div class="wallet-box">
       <select id="chain-select" aria-label="Network"></select>
@@ -226,6 +221,11 @@
   </div>
   <main>
     <div class="trade-row">
+      <section class="panel market-panel" aria-label="Markets">
+        <h2>Markets</h2>
+        <div id="market-list"></div>
+        <div class="market-meta num" id="market-meta">Select a market</div>
+      </section>
       <section class="panel form-panel" aria-label="Order form">
         <h2>Place order</h2>
         <div class="body">
@@ -316,47 +316,27 @@
           </table>
         </div>
       </section>
+      <section class="panel fills-panel" aria-label="Fills">
+        <h2>Fills</h2>
+        <div class="body" style="padding:0;">
+          <table>
+            <thead>
+              <tr>
+                <th>Order</th>
+                <th>Maker</th>
+                <th>Taker</th>
+                <th>Size</th>
+                <th>Price</th>
+                <th>Total</th>
+                <th></th>
+              </tr>
+            </thead>
+            <tbody id="fills-body"></tbody>
+          </table>
+          <div class="empty" id="fills-note"></div>
+        </div>
+      </section>
     </div>
-    <section class="panel tools" aria-label="Market id">
-      <h2>Market id</h2>
-      <div class="body">
-        <p class="hint">MatchingOrderBook from github.com/k26dr/solidity-dex. The market id is read from the contract’s getMarketId function. This page does not hash it in the browser.</p>
-        <div class="grid">
-          <label>Exchange contract <input id="exchange-address" autocomplete="off" spellcheck="false" placeholder="0x"></label>
-        </div>
-        <p class="hint" id="exchange-hint">No MatchingOrderBook address is published for this chain. Paste a deployment before any approval or trade.</p>
-        <div class="tool-actions">
-          <button type="button" class="btn accent" id="use-exchange">Use exchange</button>
-          <button type="button" class="btn" id="clear-exchange">Clear exchange</button>
-        </div>
-        <div class="grid">
-          <label>Base asset <input id="base-asset" autocomplete="off" spellcheck="false" placeholder="0x"></label>
-          <label>Quote asset <input id="quote-asset" autocomplete="off" spellcheck="false" placeholder="0x"></label>
-          <label>Min base post <input id="min-base" inputmode="decimal" autocomplete="off" spellcheck="false" placeholder="0.0"></label>
-          <label>Min quote post <input id="min-quote" inputmode="decimal" autocomplete="off" spellcheck="false" placeholder="0.0"></label>
-          <label>Fee numerator <input id="fee-num" inputmode="numeric" autocomplete="off" spellcheck="false" placeholder="1"></label>
-          <label>Fee denominator <input id="fee-den" inputmode="numeric" autocomplete="off" spellcheck="false" placeholder="1000"></label>
-          <label>Fee receiver <input id="fee-receiver" autocomplete="off" spellcheck="false" placeholder="0x"></label>
-        </div>
-        <div class="tool-actions">
-          <button type="button" class="btn accent" id="compute-id" disabled>Compute market id</button>
-          <button type="button" class="btn" id="create-market" disabled>Create market</button>
-        </div>
-        <div class="id-out num" id="market-id-output">Market id appears here.</div>
-        <div class="tool-actions">
-          <label style="flex:1;">Load market id <input id="market-id-input" autocomplete="off" spellcheck="false" placeholder="0x"></label>
-        </div>
-        <div class="tool-actions">
-          <button type="button" class="btn" id="load-market-id" disabled>Load market</button>
-          <button type="button" class="btn" id="forget-market" disabled>Forget saved market</button>
-          <button type="button" class="btn" id="retry-button">Retry connection</button>
-        </div>
-        <details class="notes">
-          <summary>Integration notes</summary>
-          <ul id="notes"></ul>
-        </details>
-      </div>
-    </section>
   </main>
 </div>
 <noscript>JavaScript is required for ZigZag Exchange.</noscript>
@@ -364,17 +344,28 @@
 "use strict";
 
 /* Call interface: MatchingOrderBook.sol in https://github.com/k26dr/solidity-dex
-   That repo does not publish a MatchingOrderBook address on Robinhood Chain
-   or Ethereum. Leave exchangeAddress empty until you have the deployment.
-   A saved address in this browser overrides the empty default per chain. */
+   Robinhood Chain Testnet hosts the fee-bearing deployment. Markets are the
+   ids published for that chain. */
 const APP = {
   bookDepth: 25,
   logChunkBlocks: 200,
-  logChunks: 20,
+  fillChunks: 40,
   pollMs: 5000,
 };
 
 const CHAINS = [
+  {
+    key: "robinhood-testnet",
+    chainId: "0xb626",
+    chainName: "Robinhood Chain Testnet",
+    rpcUrl: "https://rpc.testnet.chain.robinhood.com",
+    explorerUrl: "https://explorer.testnet.chain.robinhood.com",
+    wethAddress: "0x7943e237c7F95DA44E0301572D358911207852Fa",
+    exchangeAddress: "0x065c85B4a344B6135E2005f01B3aeaE6034e0C04",
+    marketIds: [
+      "0xac8bd66acee81d757189a757faafcb0e2f3caae8e60b417350b75e721af860b3",
+    ],
+  },
   {
     key: "robinhood",
     chainId: "0x1237",
@@ -399,12 +390,8 @@ const CHAINS = [
    published Solidity signatures. They are not derived in the browser. */
 const SEL = {
   orderCounter: "b789bf52",
-  createMarketFee: "1c30290f",
-  createMarketPlain: "1d3661dd",
   placeOrder: "581dd762",
   cancelOrder: "32d4b9b9",
-  getMarketIdFee: "ee34e64e",
-  getMarketIdPlain: "2b33a46f",
   getMarketDetails: "881268cb",
   getFirstOrderId: "0ffffa5a",
   getOrderBook: "ee3069f7",
@@ -416,15 +403,14 @@ const SEL = {
   deposit: "d0e30db0",
   withdraw: "2e1a7d4d",
 };
-const TOPIC_MARKET_FEE = "0x13946ff58749c003a6f8f071c55c38b16b752946ac571cfbb0db32eab7a5a81d";
-const TOPIC_MARKET_PLAIN = "0x628c77d608f8cbc2312cef7139b7e2c0d821b1aed42448400615cda801370c12";
+const TOPIC_ORDER_FILL = "0x5bb4c8b5684273dc8611d24aec79927e990c3556152fcd9477013c1928a52a9a";
 const BUY = 0;
 const SELL = 1;
 const DEMO_TRADER = "0x00000000000000000000000000000000000000d1";
 
 const state = {
   mode: "loading",
-  chainKey: localStorage.getItem("zigzag-exchange-v1:chain") || "robinhood",
+  chainKey: localStorage.getItem("zigzag-exchange-v1:network") || "robinhood-testnet",
   interfaceKind: null,
   account: null,
   walletChainId: null,
@@ -449,6 +435,10 @@ const state = {
   banner: "Loading exchange…",
   bannerKind: "info",
   blockReason: "",
+  fills: [],
+  fillAccount: null,
+  fillScanTo: null,
+  fillNote: "",
 };
 
 function chain() {
@@ -460,8 +450,6 @@ function storageKey(suffix) {
 }
 
 function exchangeAddress() {
-  const saved = localStorage.getItem(storageKey("exchange"));
-  if (isAddress(saved)) return normAddr(saved);
   return isAddress(chain().exchangeAddress) ? normAddr(chain().exchangeAddress) : "";
 }
 
@@ -878,41 +866,23 @@ async function readMarket(marketId) {
   };
 }
 
-function savedIds() {
-  try {
-    const parsed = JSON.parse(localStorage.getItem(storageKey("markets")) || "[]");
-    if (!Array.isArray(parsed)) return [];
-    return parsed.filter((id) => isBytes32(id)).map((id) => id.toLowerCase());
-  } catch (ignore) {
-    return [];
-  }
+function builtinIds() {
+  const list = chain().marketIds || [];
+  return list.filter((id) => isBytes32(id)).map((id) => id.toLowerCase());
 }
 
-function rememberMarket(marketId) {
-  const id = marketId.toLowerCase();
-  const ids = savedIds();
-  if (!ids.includes(id)) ids.unshift(id);
-  localStorage.setItem(storageKey("markets"), JSON.stringify(ids.slice(0, 40)));
+function padAddressTopic(address) {
+  return "0x" + normAddr(address).slice(2).padStart(64, "0");
 }
 
-function forgetMarket(marketId) {
-  const id = marketId.toLowerCase();
-  localStorage.setItem(storageKey("markets"), JSON.stringify(savedIds().filter((item) => item !== id)));
-}
-
-async function discoverMarketIds() {
-  const latest = BigInt(await rpc("eth_blockNumber", []));
+async function getLogsRange(fromBlock, toBlock, topics) {
   const chunk = BigInt(APP.logChunkBlocks);
-  const topic = state.interfaceKind === "fee" ? TOPIC_MARKET_FEE : TOPIC_MARKET_PLAIN;
   const jobs = [];
-  for (let i = 0; i < APP.logChunks; i++) {
-    const to = latest - BigInt(i) * chunk;
-    if (to < 0n) break;
-    const from = to >= chunk ? to - chunk + 1n : 0n;
+  for (let from = fromBlock; from <= toBlock; from += chunk) {
+    const to = from + chunk - 1n > toBlock ? toBlock : from + chunk - 1n;
     jobs.push([from, to]);
   }
-  state.logWindowBlocks = jobs.length * Number(chunk);
-  const ids = [];
+  const logs = [];
   let failures = 0;
   for (let i = 0; i < jobs.length; i += 4) {
     const group = jobs.slice(i, i + 4);
@@ -922,22 +892,77 @@ async function discoverMarketIds() {
           address: exchangeAddress(),
           fromBlock: "0x" + from.toString(16),
           toBlock: "0x" + to.toString(16),
-          topics: [topic],
+          topics,
         }]);
       } catch (ignore) {
         failures += 1;
         return [];
       }
     }));
-    for (const logs of results) {
-      for (const log of logs || []) {
-        const words = decodeWords(log.data || "0x");
-        if (words.length) ids.push(wordToBytes32(words[0]).toLowerCase());
-      }
+    for (const batch of results) {
+      for (const log of batch || []) logs.push(log);
     }
   }
-  if (failures === jobs.length) throw new Error("The public RPC rejected the market log scan. Paste a market id to load one.");
-  return [...new Set(ids)];
+  return { logs, failures };
+}
+
+function decodeFill(log) {
+  const topics = log.topics || [];
+  const words = decodeWords(log.data || "0x");
+  if (topics.length < 4 || words.length < 3) return null;
+  return {
+    key: String(log.transactionHash || "") + ":" + String(log.logIndex || "0"),
+    orderId: BigInt(topics[1]),
+    maker: wordToAddress(topics[2]),
+    taker: wordToAddress(topics[3]),
+    marketId: wordToBytes32(words[0]).toLowerCase(),
+    baseQuantity: words[1],
+    price: words[2],
+    txHash: log.transactionHash || "",
+    block: BigInt(log.blockNumber || "0x0"),
+    index: Number(log.logIndex || 0),
+  };
+}
+
+async function loadFills() {
+  if (state.mode !== "live" || !state.account || !sameChain(state.walletChainId)) {
+    state.fills = [];
+    state.fillAccount = null;
+    state.fillScanTo = null;
+    state.fillNote = "";
+    return;
+  }
+  const account = normAddr(state.account);
+  if (state.fillAccount !== account) {
+    state.fillAccount = account;
+    state.fillScanTo = null;
+    state.fills = [];
+  }
+  const latest = BigInt(await rpc("eth_blockNumber", []));
+  const lookback = BigInt(APP.logChunkBlocks) * BigInt(APP.fillChunks);
+  const from = state.fillScanTo == null
+    ? (latest + 1n > lookback ? latest + 1n - lookback : 0n)
+    : state.fillScanTo + 1n;
+  if (from <= latest) {
+    const topic = padAddressTopic(account);
+    const [asMaker, asTaker] = await Promise.all([
+      getLogsRange(from, latest, [TOPIC_ORDER_FILL, null, topic]),
+      getLogsRange(from, latest, [TOPIC_ORDER_FILL, null, null, topic]),
+    ]);
+    const seen = new Set(state.fills.map((fill) => fill.key));
+    for (const log of asMaker.logs.concat(asTaker.logs)) {
+      const fill = decodeFill(log);
+      if (!fill || seen.has(fill.key)) continue;
+      seen.add(fill.key);
+      state.fills.push(fill);
+    }
+    state.fillScanTo = latest;
+    state.fillNote = asMaker.failures + asTaker.failures > 0 ? "Some fill logs could not be read." : "";
+  }
+  state.fills.sort((a, b) => {
+    if (a.block === b.block) return b.index - a.index;
+    return a.block > b.block ? -1 : 1;
+  });
 }
 
 function bookCalls(marketId, side) {
@@ -1020,6 +1045,11 @@ async function loadLiveMarket() {
     state.ethBalance = 0n;
     state.wethBalance = 0n;
   }
+  try {
+    await loadFills();
+  } catch (error) {
+    state.fillNote = explainError(error);
+  }
 }
 
 function demoMarkets() {
@@ -1099,6 +1129,10 @@ function applyDemo() {
   state.quoteAllowance = 0n;
   state.ethBalance = 0n;
   state.wethBalance = 0n;
+  state.fills = [];
+  state.fillAccount = null;
+  state.fillScanTo = null;
+  state.fillNote = "";
 }
 
 async function refresh() {
@@ -1161,23 +1195,22 @@ function tradeIntent() {
 }
 
 function renderMarketSelect() {
-  const select = $("market-select");
+  const list = $("market-list");
   const signature = state.markets.map((market) => market.id + ":" + market.label).join("|");
   if (signature !== state.marketSignature) {
-    select.replaceChildren();
-    if (!state.markets.length) {
-      const option = el("option", null, "No markets");
-      option.value = "";
-      select.appendChild(option);
-    }
+    list.replaceChildren();
+    if (!state.markets.length) list.appendChild(el("div", "empty", "No markets"));
     for (const market of state.markets) {
-      const option = el("option", null, market.label);
-      option.value = market.id;
-      select.appendChild(option);
+      const button = el("button", "market-choice", market.label);
+      button.type = "button";
+      button.setAttribute("data-market-id", market.id);
+      list.appendChild(button);
     }
     state.marketSignature = signature;
   }
-  if (state.marketId && select.value !== state.marketId) select.value = state.marketId;
+  for (const button of list.querySelectorAll(".market-choice")) {
+    button.classList.toggle("is-active", button.getAttribute("data-market-id") === state.marketId);
+  }
 }
 
 function depthRows(levels) {
@@ -1217,9 +1250,9 @@ function renderBook() {
     $("spread").replaceChildren(el("span", null, "Spread"), el("span", "num", "—"));
     return;
   }
-  $("book-price-label").textContent = "Price (" + market.quote.symbol + ")";
-  $("book-size-label").textContent = "Size (" + market.base.symbol + ")";
-  $("book-total-label").textContent = "Total (" + market.quote.symbol + ")";
+  $("book-price-label").textContent = "Price";
+  $("book-size-label").textContent = "Size";
+  $("book-total-label").textContent = "Total";
   const askRows = depthRows(state.asks);
   const bidRows = depthRows(state.bids);
   for (const level of askRows.slice().reverse()) asks.appendChild(renderLevel(level, "ask", market));
@@ -1322,6 +1355,92 @@ function renderOrders() {
   }
 }
 
+function renderFills() {
+  const body = $("fills-body");
+  const note = $("fills-note");
+  const market = selectedMarket();
+  body.replaceChildren();
+  const lookback = APP.logChunkBlocks * APP.fillChunks;
+  if (state.mode !== "live") {
+    note.textContent = "Fills appear when a live exchange is connected.";
+    const cell = el("td", null, "No live exchange.");
+    cell.colSpan = 7;
+    const row = el("tr");
+    row.appendChild(cell);
+    body.appendChild(row);
+    return;
+  }
+  if (!state.account) {
+    note.textContent = "";
+    const cell = el("td", null, "Connect a wallet to see your fills.");
+    cell.colSpan = 7;
+    const row = el("tr");
+    row.appendChild(cell);
+    body.appendChild(row);
+    return;
+  }
+  if (!sameChain(state.walletChainId)) {
+    note.textContent = "";
+    const cell = el("td", null, "Switch the wallet to " + chain().chainName + " to see fills.");
+    cell.colSpan = 7;
+    const row = el("tr");
+    row.appendChild(cell);
+    body.appendChild(row);
+    return;
+  }
+  const fills = market
+    ? state.fills.filter((fill) => fill.marketId === market.id.toLowerCase())
+    : [];
+  const parts = [];
+  if (market) {
+    const id = market.id.toLowerCase();
+    parts.push("Market " + id.slice(0, 6) + "…" + id.slice(-4) + ". Maker is the resting order. Price is that order’s limit, in " + market.quote.symbol + " per 1 " + market.base.symbol + ".");
+  }
+  parts.push("Scanned about the last " + lookback + " blocks.");
+  if (state.fillNote) parts.push(state.fillNote);
+  note.textContent = parts.join(" ");
+  if (!market) {
+    const cell = el("td", null, "No market selected.");
+    cell.colSpan = 7;
+    const row = el("tr");
+    row.appendChild(cell);
+    body.appendChild(row);
+    return;
+  }
+  if (!fills.length) {
+    const cell = el("td", null, "No fills for this wallet on this market.");
+    cell.colSpan = 7;
+    const row = el("tr");
+    row.appendChild(cell);
+    body.appendChild(row);
+    return;
+  }
+  const account = normAddr(state.account);
+  for (const fill of fills) {
+    const row = el("tr");
+    const maker = el("td", normAddr(fill.maker) === account ? "you" : null, shortAddress(fill.maker));
+    const taker = el("td", normAddr(fill.taker) === account ? "you" : null, shortAddress(fill.taker));
+    const linkCell = el("td");
+    if (/^0x[0-9a-fA-F]{64}$/.test(fill.txHash) && chain().explorerUrl) {
+      const anchor = el("a", null, "Tx");
+      anchor.href = chain().explorerUrl.replace(/\/$/, "") + "/tx/" + fill.txHash;
+      anchor.target = "_blank";
+      anchor.rel = "noreferrer";
+      linkCell.appendChild(anchor);
+    }
+    row.append(
+      el("td", "num", fill.orderId.toString()),
+      maker,
+      taker,
+      el("td", "num", formatAmount(fill.baseQuantity, market.base.decimals) + " " + market.base.symbol),
+      el("td", "num", formatAmount(fill.price, market.quote.decimals)),
+      el("td", "num", formatAmount(quoteRaw(fill.baseQuantity, fill.price, market.base.decimals), market.quote.decimals) + " " + market.quote.symbol),
+      linkCell,
+    );
+    body.appendChild(row);
+  }
+}
+
 function renderMeta() {
   const market = selectedMarket();
   const meta = $("market-meta");
@@ -1351,13 +1470,6 @@ function renderChainSelect() {
     }
   }
   if (select.value !== chain().key) select.value = chain().key;
-  const exchangeInput = $("exchange-address");
-  if (exchangeInput && document.activeElement !== exchangeInput) exchangeInput.value = exchangeAddress();
-  $("exchange-hint").textContent = state.mode === "live"
-    ? "Approvals spend through this exchange on " + chain().chainName + "."
-    : exchangeAddress()
-      ? "This address is not a MatchingOrderBook on " + chain().chainName + ". Transactions stay disabled."
-      : "No MatchingOrderBook address is published for " + chain().chainName + ". Paste a deployment before any approval or trade.";
   $("weth-contract").textContent = "WETH " + chain().wethAddress;
 }
 
@@ -1429,29 +1541,6 @@ function updateTradeState() {
   }
   $("wrap-button").disabled = !live || state.txLock || !wrapOk;
   $("unwrap-button").disabled = !live || state.txLock || !wrapOk;
-  $("compute-id").disabled = state.mode !== "live" || state.txLock;
-  $("create-market").disabled = state.mode !== "live" || state.txLock;
-  $("load-market-id").disabled = state.mode !== "live" || state.txLock;
-  $("forget-market").disabled = state.mode !== "live" || !state.marketId;
-  const feeInputs = [$("fee-num"), $("fee-den"), $("fee-receiver")];
-  for (const input of feeInputs) input.disabled = state.interfaceKind === "plain";
-}
-
-function renderNotes() {
-  const items = [
-    "Calls target MatchingOrderBook in github.com/k26dr/solidity-dex. Robinhood Chain and Ethereum are the supported networks. That repository does not publish an exchange address for either chain, so trading stays disabled until you paste a deployment.",
-    "Market ids come from the contract’s getMarketId view. The page never substitutes a browser hash.",
-    "There is no on-chain market index. The public RPC returns at most " + APP.logChunkBlocks + " blocks of logs per request, so the selector scans the last " + (state.logWindowBlocks || APP.logChunkBlocks * APP.logChunks) + " blocks plus ids saved in this browser. Older markets can be loaded by id.",
-    "Order books are read with getOrderBook at depth " + APP.bookDepth + ". Deeper resting orders are not shown and cannot be cancelled here.",
-    "The fee-bearing contract stores fee numerator, denominator, and receiver inside the market id. Its placeOrder and cancelOrder functions do not transfer that fee.",
-    state.interfaceKind === "plain"
-      ? "This deployment’s market struct has no fee fields. Fee inputs are disabled and are not part of getMarketId."
-      : "A deployment whose getMarketDetails struct does not match either published MatchingOrderBook leaves trading disabled.",
-  ];
-  if (state.blockReason) items.unshift(state.blockReason);
-  const list = $("notes");
-  list.replaceChildren();
-  for (const item of items) list.appendChild(el("li", null, item));
 }
 
 function render() {
@@ -1463,7 +1552,7 @@ function render() {
   renderBook();
   renderBalances();
   renderOrders();
-  renderNotes();
+  renderFills();
   updateTradeState();
 }
 
@@ -1473,6 +1562,10 @@ async function boot() {
   state.markets = [];
   state.marketSignature = "";
   state.tokenMeta = new Map();
+  state.fills = [];
+  state.fillAccount = null;
+  state.fillScanTo = null;
+  state.fillNote = "";
   setBanner("Loading " + chain().chainName + "…", "info");
   try {
     if (window.ethereum) {
@@ -1491,20 +1584,12 @@ async function boot() {
       return;
     }
     state.mode = "live";
-    const discovered = new Set(savedIds());
-    let scanFailed = false;
-    try {
-      for (const id of await discoverMarketIds()) discovered.add(id);
-    } catch (error) {
-      scanFailed = true;
-      setStatus("Market log scan failed: " + explainError(error) + " Paste a market id to load one.", null, "warn");
-    }
     const markets = [];
-    for (const id of discovered) {
+    for (const id of builtinIds()) {
       try {
         const market = await readMarket(id);
         if (market) markets.push(market);
-      } catch (ignore) { /* skip undecodable markets */ }
+      } catch (ignore) { /* skip a published id the contract does not recognize */ }
     }
     markets.sort((a, b) => a.label.localeCompare(b.label));
     state.markets = markets;
@@ -1514,9 +1599,7 @@ async function boot() {
       ? " This deployment has no fee fields on the market."
       : " Fee fields are stored on the market id.";
     setBanner(chain().chainName + " · public RPC · exchange " + shortAddress(exchangeAddress()) + "." + feeNote, "ok");
-    if (!scanFailed && !markets.length) {
-      setStatus("No markets in the last " + state.logWindowBlocks + " blocks. Create a market or paste a market id.", null, "info");
-    }
+    if (!markets.length) setStatus("No markets are published for " + chain().chainName + ".", null, "info");
     await refresh();
     startPolling();
   } catch (error) {
@@ -1717,92 +1800,12 @@ async function wrap(direction) {
   await refresh();
 }
 
-async function generatorInputs() {
-  const base = normAddr($("base-asset").value);
-  const quote = normAddr($("quote-asset").value);
-  if (!isAddress(base) || !isAddress(quote)) throw new Error("Enter base and quote token addresses.");
-  if (isZeroAddress(base) || isZeroAddress(quote)) throw new Error("Token address cannot be the zero address.");
-  const [baseMeta, quoteMeta] = await Promise.all([loadTokenMeta(base), loadTokenMeta(quote)]);
-  const baseMin = parseUnits($("min-base").value, baseMeta.decimals);
-  const quoteMin = parseUnits($("min-quote").value, quoteMeta.decimals);
-  if (state.interfaceKind === "plain") {
-    return { base, quote, baseMin, quoteMin, fee: false };
-  }
-  if (!/^\d+$/.test($("fee-num").value.trim()) || !/^\d+$/.test($("fee-den").value.trim())) {
-    throw new Error("Fee numerator and denominator must be whole numbers.");
-  }
-  const feeNum = BigInt($("fee-num").value.trim());
-  const feeDen = BigInt($("fee-den").value.trim());
-  const receiver = normAddr($("fee-receiver").value);
-  if (!isAddress(receiver)) throw new Error("Enter a fee receiver address.");
-  return { base, quote, baseMin, quoteMin, feeNum, feeDen, receiver, fee: true };
-}
-
-async function computeMarketId() {
-  assertLive();
-  const input = await generatorInputs();
-  const words = input.fee
-    ? [encodeAddress(input.base), encodeAddress(input.quote), encodeUint(input.baseMin), encodeUint(input.quoteMin), encodeUint(input.feeNum), encodeUint(input.feeDen), encodeAddress(input.receiver)]
-    : [encodeAddress(input.base), encodeAddress(input.quote), encodeUint(input.baseMin), encodeUint(input.quoteMin)];
-  const selector = input.fee ? SEL.getMarketIdFee : SEL.getMarketIdPlain;
-  const hex = await ethCall(exchangeAddress(), encodeCall(selector, words));
-  const id = wordToBytes32(decodeWords(hex)[0]);
-  $("market-id-output").textContent = id;
-  $("market-id-input").value = id;
-  setStatus(input.fee
-    ? "Market id returned by getMarketId. Creating the market requires the fee numerator to be below the denominator."
-    : "This deployment’s getMarketId does not include a fee rate or fee receiver.", null, "ok");
-  return { id, input };
-}
-
-async function createMarket() {
-  const computed = await computeMarketId();
-  const input = computed.input;
-  if (input.fee && input.feeNum >= input.feeDen) {
-    throw new Error("Fee numerator must be less than the denominator.");
-  }
-  const words = input.fee
-    ? [encodeAddress(input.base), encodeAddress(input.quote), encodeUint(input.baseMin), encodeUint(input.quoteMin), encodeUint(input.feeNum), encodeUint(input.feeDen), encodeAddress(input.receiver)]
-    : [encodeAddress(input.base), encodeAddress(input.quote), encodeUint(input.baseMin), encodeUint(input.quoteMin)];
-  const selector = input.fee ? SEL.createMarketFee : SEL.createMarketPlain;
-  const receipt = await sendTx(exchangeAddress(), encodeCall(selector, words), 0n);
-  let id = computed.id;
-  const topic = input.fee ? TOPIC_MARKET_FEE : TOPIC_MARKET_PLAIN;
-  for (const log of receipt.logs || []) {
-    if ((log.topics || [])[0] && log.topics[0].toLowerCase() === topic && log.data) {
-      const wordsOut = decodeWords(log.data);
-      if (wordsOut.length) id = wordToBytes32(wordsOut[0]);
-    }
-  }
-  rememberMarket(id);
-  const market = await readMarket(id);
-  if (market) {
-    state.markets = state.markets.filter((item) => item.id !== id).concat(market);
-    state.marketId = id;
-    localStorage.setItem(storageKey("selected"), id);
-  }
-  $("market-id-output").textContent = id;
-  await refresh();
-}
-
-async function loadTypedMarket() {
-  assertLive();
-  const id = $("market-id-input").value.trim();
-  if (!isBytes32(id)) throw new Error("Enter a 32-byte market id.");
-  const market = await readMarket(id);
-  if (!market) throw new Error("That market id is not created. The bank address is empty.");
-  rememberMarket(market.id);
-  state.markets = state.markets.filter((item) => item.id !== market.id).concat(market);
-  state.marketId = market.id;
-  localStorage.setItem(storageKey("selected"), market.id);
-  await refresh();
-  setStatus("Loaded " + market.label + ".", null, "ok");
-}
-
 function bind() {
-  $("market-select").addEventListener("change", () => {
-    state.marketId = $("market-select").value || null;
-    if (state.marketId) localStorage.setItem(storageKey("selected"), state.marketId);
+  $("market-list").addEventListener("click", (event) => {
+    const button = event.target.closest("[data-market-id]");
+    if (!button || button.getAttribute("data-market-id") === state.marketId) return;
+    state.marketId = button.getAttribute("data-market-id");
+    localStorage.setItem(storageKey("selected"), state.marketId);
     refresh();
   });
   $("wallet-button").addEventListener("click", () => onWalletClick());
@@ -1844,38 +1847,13 @@ function bind() {
   $("place-button").addEventListener("click", () => runAction(() => placeOrder()));
   $("wrap-button").addEventListener("click", () => runAction(() => wrap("wrap")));
   $("unwrap-button").addEventListener("click", () => runAction(() => wrap("unwrap")));
-  $("compute-id").addEventListener("click", () => runAction(() => computeMarketId()));
-  $("create-market").addEventListener("click", () => runAction(() => createMarket()));
-  $("load-market-id").addEventListener("click", () => runAction(() => loadTypedMarket()));
-  $("forget-market").addEventListener("click", () => {
-    if (!state.marketId || state.mode !== "live") return;
-    forgetMarket(state.marketId);
-    state.markets = state.markets.filter((market) => market.id !== state.marketId);
-    state.marketId = state.markets[0] ? state.markets[0].id : null;
-    refresh();
-  });
-  $("retry-button").addEventListener("click", () => boot());
   $("chain-select").addEventListener("change", () => {
     if (state.txLock) {
       $("chain-select").value = chain().key;
       return;
     }
     state.chainKey = $("chain-select").value;
-    localStorage.setItem("zigzag-exchange-v1:chain", state.chainKey);
-    boot();
-  });
-  $("use-exchange").addEventListener("click", () => {
-    const value = $("exchange-address").value.trim();
-    if (!isAddress(value)) {
-      setStatus("Enter the MatchingOrderBook address for " + chain().chainName + ".", null, "warn");
-      return;
-    }
-    localStorage.setItem(storageKey("exchange"), normAddr(value));
-    boot();
-  });
-  $("clear-exchange").addEventListener("click", () => {
-    localStorage.removeItem(storageKey("exchange"));
-    $("exchange-address").value = "";
+    localStorage.setItem("zigzag-exchange-v1:network", state.chainKey);
     boot();
   });
   if (window.ethereum) {
