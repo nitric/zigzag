@@ -123,7 +123,7 @@
   .side-toggle button.buy.is-active { background: var(--bid); border-color: var(--bid); color: #04140e; font-weight: 650; }
   .side-toggle button.sell.is-active { background: var(--ask); border-color: var(--ask); color: #2a060c; font-weight: 650; }
   label { display: flex; flex-direction: column; gap: 4px; color: var(--muted); font-size: 11px; letter-spacing: 0.04em; text-transform: uppercase; }
-  label input, .inline input {
+  label input {
     text-transform: none;
     letter-spacing: 0;
     font-size: 13px;
@@ -147,10 +147,11 @@
   .wrap-actions button { flex: 1; }
   .book-head, .level {
     display: flex;
-    gap: 8px;
-    padding: 2px 10px;
+    gap: 4px;
+    padding: 2px 6px;
+    font-size: 11px;
   }
-  .book-head { color: var(--muted); font-size: 11px; text-transform: uppercase; letter-spacing: 0.04em; padding-top: 8px; }
+  .book-head { color: var(--muted); text-transform: uppercase; letter-spacing: 0.04em; padding-top: 8px; }
   .book-head span, .level span { flex: 1; text-align: right; position: relative; }
   .book-head span:first-child, .level span:first-child { text-align: left; }
   .book-scroll {
@@ -161,7 +162,6 @@
     flex-direction: column;
   }
   #asks { margin-top: auto; }
-  .book-head, .level { font-size: 11px; gap: 4px; padding-left: 6px; padding-right: 6px; }
   .level { position: relative; width: 100%; border: 0; background: transparent; color: inherit; padding-top: 1px; padding-bottom: 1px; text-align: inherit; }
   .level:hover { background: var(--hover); }
   .level .bar { position: absolute; top: 1px; bottom: 1px; right: 0; opacity: 0.22; pointer-events: none; }
@@ -246,7 +246,7 @@
           <div class="form-message" id="form-message"></div>
           <label class="check" id="fok-row" hidden>
             <input type="checkbox" id="fok-check">
-            <span>Submit below the minimum as fill-or-kill. The order reverts if it does not fill completely.</span>
+            <span id="fok-label">This size is below the posted minimum. Confirming it submits a normal order.</span>
           </label>
           <div class="actions">
             <button type="button" class="btn accent" id="approve-button" disabled>Approve</button>
@@ -314,6 +314,7 @@
             </thead>
             <tbody id="orders-body"></tbody>
           </table>
+          <div class="empty" id="orders-note">Shows your orders on this market in the loaded book.</div>
         </div>
       </section>
       <section class="panel fills-panel" aria-label="Fills">
@@ -462,6 +463,22 @@ function el(tag, className, text) {
   return node;
 }
 
+function spanRow(body, columns, text) {
+  const cell = el("td", null, text);
+  cell.colSpan = columns;
+  const row = el("tr");
+  row.appendChild(cell);
+  body.appendChild(row);
+}
+
+function explorerLink(text, txHash) {
+  const anchor = el("a", null, text);
+  anchor.href = chain().explorerUrl.replace(/\/$/, "") + "/tx/" + txHash;
+  anchor.target = "_blank";
+  anchor.rel = "noreferrer";
+  return anchor;
+}
+
 function sleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
@@ -572,7 +589,6 @@ function decodeOrderBook(hex) {
       baseQuantity: words[base + 1],
       price: words[base + 2],
       nextOrderId: words[base + 3],
-      previousOrderId: words[base + 4],
     });
   }
   return orders;
@@ -663,11 +679,7 @@ function setStatus(text, txHash, kind) {
   const link = $("tx-link");
   link.replaceChildren();
   if (txHash && /^0x[0-9a-fA-F]{64}$/.test(txHash) && chain().explorerUrl) {
-    const anchor = el("a", null, "View transaction");
-    anchor.href = chain().explorerUrl.replace(/\/$/, "") + "/tx/" + txHash;
-    anchor.target = "_blank";
-    anchor.rel = "noreferrer";
-    link.appendChild(anchor);
+    link.appendChild(explorerLink("View transaction", txHash));
   }
 }
 
@@ -765,7 +777,7 @@ function configured() {
 async function probeExchange() {
   if (!configured()) {
     state.interfaceKind = null;
-    state.blockReason = chain().chainName + " has no MatchingOrderBook address yet. Paste the deployment to leave demo mode.";
+    state.blockReason = chain().chainName + " has no published exchange, so orders stay disabled.";
     return false;
   }
   const code = await rpc("eth_getCode", [exchangeAddress(), "latest"]);
@@ -1246,13 +1258,10 @@ function renderBook() {
   asks.replaceChildren();
   bids.replaceChildren();
   if (!market) {
-    asks.appendChild(el("div", "empty", "Create a market or load a market id to see the book."));
+    asks.appendChild(el("div", "empty", "No market is published for this network."));
     $("spread").replaceChildren(el("span", null, "Spread"), el("span", "num", "—"));
     return;
   }
-  $("book-price-label").textContent = "Price";
-  $("book-size-label").textContent = "Size";
-  $("book-total-label").textContent = "Total";
   const askRows = depthRows(state.asks);
   const bidRows = depthRows(state.bids);
   for (const level of askRows.slice().reverse()) asks.appendChild(renderLevel(level, "ask", market));
@@ -1292,11 +1301,7 @@ function renderBalances() {
     return;
   }
   if (!state.account) {
-    const row = el("tr");
-    const cell = el("td", null, "Connect a wallet on " + chain().chainName + " to read balances.");
-    cell.colSpan = 5;
-    row.appendChild(cell);
-    body.appendChild(row);
+    spanRow(body, 5, "Connect a wallet on " + chain().chainName + " to read balances.");
     return;
   }
   const reserved = reservedAmounts(market);
@@ -1311,22 +1316,15 @@ function renderBalances() {
 function renderOrders() {
   const body = $("orders-body");
   const market = selectedMarket();
+  $("orders-note").textContent = "Shows your orders on this market in the loaded book.";
   body.replaceChildren();
   const orders = userOrders();
   if (!market) {
-    const row = el("tr");
-    const cell = el("td", null, "No market selected.");
-    cell.colSpan = 5;
-    row.appendChild(cell);
-    body.appendChild(row);
+    spanRow(body, 5, "No market selected.");
     return;
   }
   if (!orders.length) {
-    const row = el("tr");
-    const cell = el("td", null, state.account || state.mode === "demo" ? "No active orders in the loaded book." : "Connect a wallet to see your orders.");
-    cell.colSpan = 5;
-    row.appendChild(cell);
-    body.appendChild(row);
+    spanRow(body, 5, state.account || state.mode === "demo" ? "No active orders in the loaded book." : "Connect a wallet to see your orders.");
     return;
   }
   for (const order of orders) {
@@ -1363,29 +1361,17 @@ function renderFills() {
   const lookback = APP.logChunkBlocks * APP.fillChunks;
   if (state.mode !== "live") {
     note.textContent = "Fills appear when a live exchange is connected.";
-    const cell = el("td", null, "No live exchange.");
-    cell.colSpan = 7;
-    const row = el("tr");
-    row.appendChild(cell);
-    body.appendChild(row);
+    spanRow(body, 7, "No live exchange.");
     return;
   }
   if (!state.account) {
     note.textContent = "";
-    const cell = el("td", null, "Connect a wallet to see your fills.");
-    cell.colSpan = 7;
-    const row = el("tr");
-    row.appendChild(cell);
-    body.appendChild(row);
+    spanRow(body, 7, "Connect a wallet to see your fills.");
     return;
   }
   if (!sameChain(state.walletChainId)) {
     note.textContent = "";
-    const cell = el("td", null, "Switch the wallet to " + chain().chainName + " to see fills.");
-    cell.colSpan = 7;
-    const row = el("tr");
-    row.appendChild(cell);
-    body.appendChild(row);
+    spanRow(body, 7, "Switch the wallet to " + chain().chainName + " to see fills.");
     return;
   }
   const fills = market
@@ -1400,19 +1386,11 @@ function renderFills() {
   if (state.fillNote) parts.push(state.fillNote);
   note.textContent = parts.join(" ");
   if (!market) {
-    const cell = el("td", null, "No market selected.");
-    cell.colSpan = 7;
-    const row = el("tr");
-    row.appendChild(cell);
-    body.appendChild(row);
+    spanRow(body, 7, "No market selected.");
     return;
   }
   if (!fills.length) {
-    const cell = el("td", null, "No fills for this wallet on this market.");
-    cell.colSpan = 7;
-    const row = el("tr");
-    row.appendChild(cell);
-    body.appendChild(row);
+    spanRow(body, 7, "No fills for this wallet on this market.");
     return;
   }
   const account = normAddr(state.account);
@@ -1422,11 +1400,7 @@ function renderFills() {
     const taker = el("td", normAddr(fill.taker) === account ? "you" : null, shortAddress(fill.taker));
     const linkCell = el("td");
     if (/^0x[0-9a-fA-F]{64}$/.test(fill.txHash) && chain().explorerUrl) {
-      const anchor = el("a", null, "Tx");
-      anchor.href = chain().explorerUrl.replace(/\/$/, "") + "/tx/" + fill.txHash;
-      anchor.target = "_blank";
-      anchor.rel = "noreferrer";
-      linkCell.appendChild(anchor);
+      linkCell.appendChild(explorerLink("Tx", fill.txHash));
     }
     row.append(
       el("td", "num", fill.orderId.toString()),
@@ -1499,6 +1473,7 @@ function updateTradeState() {
   const approve = $("approve-button");
   const reset = $("reset-allowance");
   const fokRow = $("fok-row");
+  $("fok-label").textContent = "This size is below the posted minimum. Confirming it submits a normal order.";
   place.className = "btn " + (state.side === BUY ? "buy" : "sell");
   const market = selectedMarket();
   place.textContent = market ? (state.side === BUY ? "Buy " : "Sell ") + market.base.symbol : "Place order";
@@ -1521,7 +1496,7 @@ function updateTradeState() {
     place.disabled = !live || state.txLock || !enough || !fokOk;
     if (!live) message.textContent = state.mode === "demo" ? "Demo data only. Orders are not sent." : "Connect a wallet on " + chain().chainName + " to trade.";
     else if (!enough) message.textContent = "Allowance is below this order. The spender is the exchange contract.";
-    else if (!fokOk) message.textContent = "This order is below the minimum post size.";
+    else if (!fokOk) message.textContent = "This order is below the posted minimum. Confirm it to submit a normal order.";
     else message.textContent = "";
     $("allowance-label").textContent = "Allowance " + formatAmount(intent.allowance, intent.spendToken.decimals) + " " + intent.spendToken.symbol;
   }
@@ -1767,7 +1742,7 @@ async function approveSpend(amount) {
 async function placeOrder() {
   const intent = tradeIntent();
   if (!intent.ok) throw new Error(intent.reason);
-  if (intent.belowMin && !$("fok-check").checked) throw new Error("Confirm fill-or-kill before placing an order below the minimum.");
+  if (intent.belowMin && !$("fok-check").checked) throw new Error("Confirm the below-minimum order before placing it.");
   const fresh = await readAllowance(intent.spendToken.address, await requireAccount());
   if (fresh < intent.required) throw new Error("Approval is not confirmed for this amount yet.");
   const data = encodeCall(SEL.placeOrder, [

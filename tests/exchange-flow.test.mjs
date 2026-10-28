@@ -426,7 +426,7 @@ async function loadPage(options = {}) {
     revertPlace: Boolean(options.revertPlace),
     marketLogs: options.marketLogs || [],
     receiptLogs: options.receiptLogs || [],
-    validMarkets: new Set([TESTNET.marketId, ...(options.extraMarkets || [])].map((id) => id.toLowerCase())),
+    validMarkets: new Set(options.noPublishedMarket ? [] : [TESTNET.marketId, ...(options.extraMarkets || [])].map((id) => id.toLowerCase())),
     fills: options.fills === undefined ? defaultFills() : options.fills,
     balance: new Map([
       [BASE, 5n * 10n ** 18n],
@@ -729,6 +729,7 @@ test("the order book is read from the exchange and the prices are the contract v
   assert.equal(api.$("asks").querySelectorAll(".level")[0].children[0].style.width, "100%");
   assert.equal(api.$("spread").children[1].textContent, "10");
   assert.deepEqual(tableRows(api.document, "orders-body"), [["Sell", "100", "2 ZZB", "2 ZZB", "Cancel"]]);
+  assert.equal(api.$("orders-note").textContent, "Shows your orders on this market in the loaded book.");
 });
 
 test("balances come from the token contracts and allowance names the exchange as spender", async () => {
@@ -904,12 +905,15 @@ test("clicking a book level fills the price, and max uses the wallet balance", a
   assert.equal(api.$("amount-input").value, "5");
 });
 
-test("an order below the minimum is not sent until fill-or-kill is confirmed", async () => {
+test("an order below the minimum is not sent until the normal order is confirmed", async () => {
   const api = await loadPage();
   api.setInput("price-input", "100");
   api.setInput("amount-input", "0.1");
   assert.equal(api.$("fok-row").hidden, false);
+  assert.equal(api.$("fok-label").textContent, "This size is below the posted minimum. Confirming it submits a normal order.");
+  assert.equal(api.$("form-message").textContent, "This order is below the posted minimum. Confirm it to submit a normal order.");
   assert.equal(api.$("place-button").disabled, true);
+  assert.equal(sends(api).length, 0);
   api.$("fok-check").checked = true;
   for (const fn of api.$("fok-check").listeners.change || []) fn({ target: api.$("fok-check") });
   assert.equal(api.$("place-button").disabled, false);
@@ -970,9 +974,17 @@ test("a saved exchange address is ignored", async () => {
 test("Ethereum has no published exchange, so boot does not call one", async () => {
   const api = await loadPage({ chainKey: "ethereum", chainId: "0x1", account: null });
   assert.equal(api.state.mode, "demo");
+  assert.match(api.$("banner").textContent, /Ethereum has no published exchange, so orders stay disabled/);
   assert.equal(rpcCalls(api, "eth_call").length, 0);
   assert.equal(rpcCalls(api, "eth_getCode").length, 0);
   assert.equal(sends(api).length, 0);
+});
+
+test("a network with no recognized market says none is published", async () => {
+  const api = await loadPage({ noPublishedMarket: true });
+  assert.equal(api.state.mode, "live");
+  assert.equal(api.state.markets.length, 0);
+  assert.equal(api.$("asks").textContent, "No market is published for this network.");
 });
 
 test("a plain market shows that no fee is stored", async () => {
