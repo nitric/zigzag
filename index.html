@@ -241,6 +241,16 @@
           <div class="total-line num" id="total-output">Total —</div>
           <div class="hint num" id="min-label">Minimum post —</div>
           <div class="hint num" id="fee-label">Market fee —</div>
+          <label id="referrer-row" hidden>Referrer
+            <input id="referrer-input" autocomplete="off" spellcheck="false" placeholder="Optional 0x address">
+          </label>
+          <label id="hint-row" hidden>Book hint
+            <input id="hint-input" inputmode="numeric" autocomplete="off" spellcheck="false" placeholder="Optional order id">
+          </label>
+          <div class="hint" id="parked-row" hidden>
+            <span class="num" id="parked-label">Parked —</span>
+            <button type="button" class="btn accent" id="withdraw-parked" disabled>Withdraw parked</button>
+          </div>
           <div class="hint num" id="allowance-label">Allowance —</div>
           <div class="hint" id="spender-label"></div>
           <div class="form-message" id="form-message"></div>
@@ -345,10 +355,14 @@
 "use strict";
 
 /* Call interface: MatchingOrderBook.sol in https://github.com/k26dr/solidity-dex
-   Robinhood Chain Testnet hosts the fee-bearing deployment. Markets are the
-   ids published for that chain. */
+   The current contract stores base decimals on the market, splits the taker fee
+   between the order referrer and the protocol, pages the book from a hint, and
+   parks a payment when a transfer fails. Robinhood Chain Testnet still hosts
+   the earlier deployment, which stores a fee receiver on the market. Markets
+   are the ids published for that chain. */
 const APP = {
   bookDepth: 25,
+  bookPages: 8,
   logChunkBlocks: 200,
   fillChunks: 40,
   pollMs: 5000,
@@ -392,10 +406,18 @@ const CHAINS = [
 const SEL = {
   orderCounter: "b789bf52",
   placeOrder: "581dd762",
+  placeOrderReferrer: "a092de94",
+  placeOrderWithHint: "aba208df",
+  placeOrderWithHintReferrer: "986fb201",
   cancelOrder: "32d4b9b9",
   getMarketDetails: "881268cb",
   getFirstOrderId: "0ffffa5a",
   getOrderBook: "ee3069f7",
+  getOrderBookWithStartId: "20d6d34b",
+  protocolFeePercent: "d6e6eb9f",
+  protocolFeeReceiver: "39a51be5",
+  failedPaymentBalance: "d9f87383",
+  withdrawFailedPayment: "c87a69c4",
   balanceOf: "70a08231",
   allowance: "dd62ed3e",
   approve: "095ea7b3",
@@ -440,6 +462,10 @@ const state = {
   fillAccount: null,
   fillScanTo: null,
   fillNote: "",
+  protocolFeePercent: null,
+  protocolFeeReceiver: null,
+  parkedBase: 0n,
+  parkedQuote: 0n,
 };
 
 function chain() {
@@ -594,8 +620,8 @@ function decodeOrderBook(hex) {
   return orders;
 }
 
-function levelsFromBook(headHex, bookHex) {
-  let id = decodeWords(headHex)[0] || 0n;
+function ordersFromBook(startId, bookHex) {
+  let id = startId;
   const levels = [];
   for (const order of decodeOrderBook(bookHex)) {
     if (id === 0n || order.baseQuantity === 0n || isZeroAddress(order.user)) {
@@ -612,7 +638,7 @@ function levelsFromBook(headHex, bookHex) {
     });
     id = order.nextOrderId;
   }
-  return { levels, truncated: id !== 0n };
+  return { levels, nextId: id };
 }
 
 function parseUnits(value, decimals) {
@@ -774,7 +800,23 @@ function configured() {
   return Boolean(chain().rpcUrl) && isAddress(exchangeAddress()) && isAddress(chain().wethAddress);
 }
 
+function clearProtocolFee() {
+  state.protocolFeePercent = null;
+  state.protocolFeeReceiver = null;
+}
+
+async function readProtocolFee() {
+  const percentHex = await ethCall(exchangeAddress(), encodeCall(SEL.protocolFeePercent));
+  const percentWords = decodeWords(percentHex);
+  if (percentWords.length !== 1 || percentWords[0] > 50n) return null;
+  const receiverHex = await ethCall(exchangeAddress(), encodeCall(SEL.protocolFeeReceiver));
+  const receiverWords = decodeWords(receiverHex);
+  if (receiverWords.length !== 1) return null;
+  return { percent: percentWords[0], receiver: wordToAddress(receiverWords[0]) };
+}
+
 async function probeExchange() {
+  clearProtocolFee();
   if (!configured()) {
     state.interfaceKind = null;
     state.blockReason = chain().chainName + " has no published exchange, so orders stay disabled.";
@@ -801,8 +843,23 @@ async function probeExchange() {
     state.blockReason = "The configured contract does not expose orderCounter().";
     return false;
   }
+  let protocolFee = null;
+  try {
+    protocolFee = await readProtocolFee();
+  } catch (ignore) {
+    protocolFee = null;
+  }
   const words = decodeWords(details).length;
-  if (words === 8) state.interfaceKind = "fee";
+  if (protocolFee) {
+    if (words !== 8) {
+      state.interfaceKind = null;
+      state.blockReason = "getMarketDetails returned " + words + " words, not the published market struct.";
+      return false;
+    }
+    state.interfaceKind = "current";
+    state.protocolFeePercent = protocolFee.percent;
+    state.protocolFeeReceiver = protocolFee.receiver;
+  } else if (words === 8) state.interfaceKind = "fee";
   else if (words === 5) state.interfaceKind = "plain";
   else {
     state.interfaceKind = null;
@@ -815,6 +872,24 @@ async function probeExchange() {
 
 function decodeMarketDetails(hex) {
   const words = decodeWords(hex);
+  if (state.interfaceKind === "current") {
+    if (words.length < 8) throw new Error("Market details are incomplete.");
+    const baseDecimals = Number(words[6]);
+    if (!Number.isInteger(baseDecimals) || baseDecimals < 0 || baseDecimals > 255) {
+      throw new Error("Market base decimals are invalid.");
+    }
+    return {
+      baseToken: wordToAddress(words[0]),
+      quoteToken: wordToAddress(words[1]),
+      baseMin: words[2],
+      quoteMin: words[3],
+      feeNum: words[4],
+      feeDen: words[5],
+      baseDecimals,
+      feeReceiver: null,
+      bank: wordToAddress(words[7]),
+    };
+  }
   if (state.interfaceKind === "fee") {
     if (words.length < 8) throw new Error("Market details are incomplete.");
     return {
@@ -824,6 +899,7 @@ function decodeMarketDetails(hex) {
       quoteMin: words[3],
       feeNum: words[4],
       feeDen: words[5],
+      baseDecimals: null,
       feeReceiver: wordToAddress(words[6]),
       bank: wordToAddress(words[7]),
     };
@@ -836,6 +912,7 @@ function decodeMarketDetails(hex) {
     quoteMin: words[3],
     feeNum: null,
     feeDen: null,
+    baseDecimals: null,
     feeReceiver: null,
     bank: wordToAddress(words[4]),
   };
@@ -859,10 +936,13 @@ async function readMarket(marketId) {
   const detailsHex = await ethCall(exchangeAddress(), encodeCall(SEL.getMarketDetails, [encodeBytes32(marketId)]));
   const details = decodeMarketDetails(detailsHex);
   if (isZeroAddress(details.bank)) return null;
-  const [base, quote] = await Promise.all([
+  let [base, quote] = await Promise.all([
     loadTokenMeta(details.baseToken),
     loadTokenMeta(details.quoteToken),
   ]);
+  if (details.baseDecimals != null && base.decimals !== details.baseDecimals) {
+    base = { ...base, decimals: details.baseDecimals };
+  }
   return {
     id: marketId.toLowerCase(),
     label: base.symbol + "/" + quote.symbol,
@@ -977,13 +1057,46 @@ async function loadFills() {
   });
 }
 
-function bookCalls(marketId, side) {
-  const head = encodeCall(SEL.getFirstOrderId, [encodeBytes32(marketId), encodeUint(side)]);
-  const book = encodeCall(SEL.getOrderBook, [encodeBytes32(marketId), encodeUint(side), encodeUint(APP.bookDepth)]);
-  return Promise.all([
-    ethCall(exchangeAddress(), head),
-    ethCall(exchangeAddress(), book),
-  ]).then(([headHex, bookHex]) => levelsFromBook(headHex, bookHex));
+async function readFailedPayment(bank, token) {
+  const hex = await ethCall(exchangeAddress(), encodeCall(SEL.failedPaymentBalance, [
+    encodeAddress(state.account),
+    encodeAddress(bank),
+    encodeAddress(token),
+  ]));
+  return decodeWords(hex)[0];
+}
+
+async function bookCalls(marketId, side) {
+  const headHex = await ethCall(exchangeAddress(), encodeCall(SEL.getFirstOrderId, [encodeBytes32(marketId), encodeUint(side)]));
+  const head = decodeWords(headHex)[0] || 0n;
+  if (state.interfaceKind !== "current") {
+    const bookHex = await ethCall(exchangeAddress(), encodeCall(SEL.getOrderBook, [
+      encodeBytes32(marketId),
+      encodeUint(side),
+      encodeUint(APP.bookDepth),
+    ]));
+    const page = ordersFromBook(head, bookHex);
+    return { levels: page.levels, truncated: page.nextId !== 0n };
+  }
+  const levels = [];
+  let cursor = head;
+  let truncated = false;
+  for (let page = 0; page < APP.bookPages && cursor !== 0n; page++) {
+    const data = page === 0
+      ? encodeCall(SEL.getOrderBook, [encodeBytes32(marketId), encodeUint(side), encodeUint(APP.bookDepth)])
+      : encodeCall(SEL.getOrderBookWithStartId, [
+        encodeBytes32(marketId),
+        encodeUint(side),
+        encodeUint(APP.bookDepth),
+        encodeUint(cursor),
+      ]);
+    const bookHex = await ethCall(exchangeAddress(), data);
+    const parsed = ordersFromBook(cursor, bookHex);
+    levels.push(...parsed.levels);
+    cursor = parsed.nextId;
+    truncated = cursor !== 0n;
+  }
+  return { levels, truncated };
 }
 
 async function readBalance(token, account) {
@@ -1025,6 +1138,8 @@ async function loadLiveMarket() {
     state.asks = [];
     state.bids = [];
     state.bookTruncated = false;
+    state.parkedBase = 0n;
+    state.parkedQuote = 0n;
     return;
   }
   const [askResult, bidResult] = await Promise.all([
@@ -1035,13 +1150,17 @@ async function loadLiveMarket() {
   state.bids = bidResult.levels.map((level) => ({ ...level, side: BUY }));
   state.bookTruncated = askResult.truncated || bidResult.truncated;
   if (state.account && sameChain(state.walletChainId)) {
-    const [baseWallet, quoteWallet, baseAllowance, quoteAllowance, ethHex, weth] = await Promise.all([
+    const parkedReads = state.interfaceKind === "current"
+      ? [readFailedPayment(market.bank, market.base.address), readFailedPayment(market.bank, market.quote.address)]
+      : [Promise.resolve(0n), Promise.resolve(0n)];
+    const [baseWallet, quoteWallet, baseAllowance, quoteAllowance, ethHex, weth, parkedBase, parkedQuote] = await Promise.all([
       readBalance(market.base.address, state.account),
       readBalance(market.quote.address, state.account),
       readAllowance(market.base.address, state.account),
       readAllowance(market.quote.address, state.account),
       rpc("eth_getBalance", [state.account, "latest"]),
       readBalance(chain().wethAddress, state.account),
+      ...parkedReads,
     ]);
     state.baseWallet = baseWallet;
     state.quoteWallet = quoteWallet;
@@ -1049,6 +1168,17 @@ async function loadLiveMarket() {
     state.quoteAllowance = quoteAllowance;
     state.ethBalance = BigInt(ethHex);
     state.wethBalance = weth;
+    state.parkedBase = parkedBase;
+    state.parkedQuote = parkedQuote;
+    if (state.interfaceKind === "current") {
+      try {
+        const protocolFee = await readProtocolFee();
+        if (protocolFee) {
+          state.protocolFeePercent = protocolFee.percent;
+          state.protocolFeeReceiver = protocolFee.receiver;
+        }
+      } catch (ignore) { /* keep the fee read during probe */ }
+    }
   } else {
     state.baseWallet = 0n;
     state.quoteWallet = 0n;
@@ -1056,6 +1186,8 @@ async function loadLiveMarket() {
     state.quoteAllowance = 0n;
     state.ethBalance = 0n;
     state.wethBalance = 0n;
+    state.parkedBase = 0n;
+    state.parkedQuote = 0n;
   }
   try {
     await loadFills();
@@ -1145,6 +1277,9 @@ function applyDemo() {
   state.fillAccount = null;
   state.fillScanTo = null;
   state.fillNote = "";
+  state.parkedBase = 0n;
+  state.parkedQuote = 0n;
+  clearProtocolFee();
 }
 
 async function refresh() {
@@ -1189,6 +1324,8 @@ function tradeIntent() {
   if (priceRawValue === 0n || baseRawValue === 0n) return { ok: false, reason: "Price and amount must be greater than zero." };
   const quote = quoteRaw(baseRawValue, priceRawValue, market.base.decimals);
   if (quote === 0n) return { ok: false, reason: "The quote amount rounds down to zero at this price scale." };
+  const extras = orderExtras();
+  if (!extras.ok) return { ok: false, reason: extras.reason };
   const belowMin = baseRawValue < market.baseMin || quote < market.quoteMin;
   const spendToken = state.side === BUY ? market.quote : market.base;
   const required = state.side === BUY ? quote : baseRawValue;
@@ -1203,7 +1340,58 @@ function tradeIntent() {
     spendToken,
     required,
     allowance,
+    extras,
   };
+}
+
+function orderExtras() {
+  if (state.interfaceKind !== "current") return { ok: true, referrer: "", hint: null };
+  const referrer = $("referrer-input").value.trim();
+  const hintText = $("hint-input").value.trim();
+  if (referrer && (!isAddress(referrer) || isZeroAddress(referrer))) {
+    return { ok: false, reason: "Enter a referrer address, or leave it blank." };
+  }
+  if (referrer && sameAddr(referrer, exchangeAddress())) {
+    return { ok: false, reason: "The exchange contract cannot be the referrer." };
+  }
+  let hint = null;
+  if (hintText) {
+    if (!/^\d+$/.test(hintText)) return { ok: false, reason: "Book hint must be an order id." };
+    hint = BigInt(hintText);
+    if (hint === 0n || hint >= 2n ** 128n) return { ok: false, reason: "Book hint must be an order id." };
+  }
+  return { ok: true, referrer: referrer ? normAddr(referrer) : "", hint };
+}
+
+function placeOrderCall(intent) {
+  const head = [
+    encodeBytes32(intent.market.id),
+    encodeUint(state.side),
+    encodeUint(intent.baseRaw),
+    encodeUint(intent.priceRaw),
+  ];
+  const extras = intent.extras;
+  if (!extras || state.interfaceKind !== "current") return encodeCall(SEL.placeOrder, head);
+  const referrer = extras.referrer ? encodeAddress(extras.referrer) : "";
+  const hint = extras.hint == null ? "" : encodeUint(extras.hint);
+  if (hint && referrer) return encodeCall(SEL.placeOrderWithHintReferrer, head.concat([hint, referrer]));
+  if (hint) return encodeCall(SEL.placeOrderWithHint, head.concat([hint]));
+  if (referrer) return encodeCall(SEL.placeOrderReferrer, head.concat([referrer]));
+  return encodeCall(SEL.placeOrder, head);
+}
+
+function feeText(market) {
+  if (!market || market.feeNum === null) return "Market fee is not stored on this deployment.";
+  const rate = formatFeeRate(market.feeNum, market.feeDen);
+  if (state.interfaceKind !== "current") {
+    return "Market fee " + rate + " to " + shortAddress(market.feeReceiver);
+  }
+  const protocol = state.protocolFeePercent == null ? 0n : state.protocolFeePercent;
+  const referrerShare = 100n - protocol;
+  const receiver = state.protocolFeeReceiver && !isZeroAddress(state.protocolFeeReceiver)
+    ? " to " + shortAddress(state.protocolFeeReceiver)
+    : "";
+  return "Taker fee " + rate + ". Referrer receives " + referrerShare.toString() + "% of the fee. Protocol receives " + protocol.toString() + "%" + receiver + ".";
 }
 
 function renderMarketSelect() {
@@ -1316,7 +1504,9 @@ function renderBalances() {
 function renderOrders() {
   const body = $("orders-body");
   const market = selectedMarket();
-  $("orders-note").textContent = "Shows your orders on this market in the loaded book.";
+  $("orders-note").textContent = state.interfaceKind === "current"
+    ? "Shows your orders on this market in the loaded book. A resting order that falls below the minimum is refunded."
+    : "Shows your orders on this market in the loaded book.";
   body.replaceChildren();
   const orders = userOrders();
   if (!market) {
@@ -1430,8 +1620,7 @@ function renderMeta() {
   const minQuote = formatAmount(market.quoteMin, market.quote.decimals) + " " + market.quote.symbol;
   meta.textContent = "Min " + minBase + " · " + minQuote;
   $("min-label").textContent = "Minimum post " + minBase + " and " + minQuote;
-  if (market.feeNum === null) $("fee-label").textContent = "Market fee is not stored on this deployment.";
-  else $("fee-label").textContent = "Market fee " + formatFeeRate(market.feeNum, market.feeDen) + " to " + shortAddress(market.feeReceiver);
+  $("fee-label").textContent = feeText(market);
 }
 
 function renderChainSelect() {
@@ -1516,6 +1705,22 @@ function updateTradeState() {
   }
   $("wrap-button").disabled = !live || state.txLock || !wrapOk;
   $("unwrap-button").disabled = !live || state.txLock || !wrapOk;
+  renderOrderExtras();
+}
+
+function renderOrderExtras() {
+  const current = state.interfaceKind === "current" && state.mode === "live";
+  $("referrer-row").hidden = !current;
+  $("hint-row").hidden = !current;
+  const market = selectedMarket();
+  const showParked = current && market && state.account && (state.parkedBase > 0n || state.parkedQuote > 0n);
+  $("parked-row").hidden = !showParked;
+  if (!showParked) return;
+  const parts = [];
+  if (state.parkedBase > 0n) parts.push(formatAmount(state.parkedBase, market.base.decimals) + " " + market.base.symbol);
+  if (state.parkedQuote > 0n) parts.push(formatAmount(state.parkedQuote, market.quote.decimals) + " " + market.quote.symbol);
+  $("parked-label").textContent = "Parked " + parts.join(" · ");
+  $("withdraw-parked").disabled = !walletReady() || state.txLock;
 }
 
 function render() {
@@ -1572,7 +1777,9 @@ async function boot() {
     state.marketId = markets.some((market) => market.id === stored) ? stored : (markets[0] ? markets[0].id : null);
     const feeNote = state.interfaceKind === "plain"
       ? " This deployment has no fee fields on the market."
-      : " Fee fields are stored on the market id.";
+      : state.interfaceKind === "current"
+        ? " Taker fees split between the order referrer and the protocol."
+        : " Fee fields are stored on the market id.";
     setBanner(chain().chainName + " · public RPC · exchange " + shortAddress(exchangeAddress()) + "." + feeNote, "ok");
     if (!markets.length) setStatus("No markets are published for " + chain().chainName + ".", null, "info");
     await refresh();
@@ -1745,13 +1952,7 @@ async function placeOrder() {
   if (intent.belowMin && !$("fok-check").checked) throw new Error("Confirm the below-minimum order before placing it.");
   const fresh = await readAllowance(intent.spendToken.address, await requireAccount());
   if (fresh < intent.required) throw new Error("Approval is not confirmed for this amount yet.");
-  const data = encodeCall(SEL.placeOrder, [
-    encodeBytes32(intent.market.id),
-    encodeUint(state.side),
-    encodeUint(intent.baseRaw),
-    encodeUint(intent.priceRaw),
-  ]);
-  await sendTx(exchangeAddress(), data, 0n);
+  await sendTx(exchangeAddress(), placeOrderCall(intent), 0n);
   await refresh();
 }
 
@@ -1764,6 +1965,20 @@ async function cancelOrder(side, orderId) {
     encodeUint(orderId),
   ]);
   await sendTx(exchangeAddress(), data, 0n);
+  await refresh();
+}
+
+async function withdrawParked() {
+  const market = selectedMarket();
+  if (!market) throw new Error("Select a market.");
+  const tokens = [];
+  if (state.parkedBase > 0n) tokens.push(market.base.address);
+  if (state.parkedQuote > 0n) tokens.push(market.quote.address);
+  if (!tokens.length) throw new Error("No parked balance on this market.");
+  for (const token of tokens) {
+    const data = encodeCall(SEL.withdrawFailedPayment, [encodeAddress(market.bank), encodeAddress(token)]);
+    await sendTx(exchangeAddress(), data, 0n);
+  }
   await refresh();
 }
 
@@ -1786,7 +2001,9 @@ function bind() {
   $("wallet-button").addEventListener("click", () => onWalletClick());
   $("side-buy").addEventListener("click", () => { state.side = BUY; $("side-buy").classList.add("is-active"); $("side-sell").classList.remove("is-active"); updateTradeState(); });
   $("side-sell").addEventListener("click", () => { state.side = SELL; $("side-sell").classList.add("is-active"); $("side-buy").classList.remove("is-active"); updateTradeState(); });
-  for (const id of ["price-input", "amount-input", "wrap-amount"]) $(id).addEventListener("input", updateTradeState);
+  for (const id of ["price-input", "amount-input", "wrap-amount", "referrer-input", "hint-input"]) {
+    $(id).addEventListener("input", updateTradeState);
+  }
   $("fok-check").addEventListener("change", updateTradeState);
   $("max-amount").addEventListener("click", () => {
     const market = selectedMarket();
@@ -1820,6 +2037,7 @@ function bind() {
   $("approve-button").addEventListener("click", () => runAction(() => approveSpend()));
   $("reset-allowance").addEventListener("click", () => runAction(() => approveSpend(0n)));
   $("place-button").addEventListener("click", () => runAction(() => placeOrder()));
+  $("withdraw-parked").addEventListener("click", () => runAction(() => withdrawParked()));
   $("wrap-button").addEventListener("click", () => runAction(() => wrap("wrap")));
   $("unwrap-button").addEventListener("click", () => runAction(() => wrap("unwrap")));
   $("chain-select").addEventListener("change", () => {

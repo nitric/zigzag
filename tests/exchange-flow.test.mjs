@@ -6,8 +6,10 @@
  *   node --test tests/exchange-flow.test.mjs
  *
  * Selectors are keccak256 of the MatchingOrderBook ABI, not copies of the page constants.
- * The fee-bearing market is the contract in github.com/k26dr/solidity-dex MatchingOrderBook.sol.
- * The plain signatures are that market with the fee fields removed.
+ * "current" is github.com/k26dr/solidity-dex MatchingOrderBook.sol: base decimals on the
+ * market, a per-order referrer, and a protocol share of the taker fee.
+ * "fee" is the earlier deployment that stores a fee receiver on the market.
+ * "plain" is that market with the fee fields removed.
  */
 import assert from "node:assert/strict";
 import fs from "node:fs";
@@ -52,12 +54,21 @@ const SIGNATURES = {
   createMarketFee: "createMarket(address,address,uint256,uint256,uint256,uint256,address)",
   createMarketPlain: "createMarket(address,address,uint256,uint256)",
   placeOrder: "placeOrder(bytes32,uint8,uint256,uint256)",
+  placeOrderReferrer: "placeOrder(bytes32,uint8,uint256,uint256,address)",
+  placeOrderWithHint: "placeOrderWithHint(bytes32,uint8,uint256,uint256,uint128)",
+  placeOrderWithHintReferrer: "placeOrderWithHint(bytes32,uint8,uint256,uint256,uint128,address)",
   cancelOrder: "cancelOrder(bytes32,uint8,uint128)",
+  createMarket: "createMarket(address,address,uint256,uint256,uint256,uint256)",
   getMarketIdFee: "getMarketId(address,address,uint256,uint256,uint256,uint256,address)",
   getMarketIdPlain: "getMarketId(address,address,uint256,uint256)",
   getMarketDetails: "getMarketDetails(bytes32)",
   getFirstOrderId: "getFirstOrderId(bytes32,uint8)",
   getOrderBook: "getOrderBook(bytes32,uint8,uint256)",
+  getOrderBookWithStartId: "getOrderBookWithStartId(bytes32,uint8,uint256,uint128)",
+  protocolFeePercent: "protocolFeePercent()",
+  protocolFeeReceiver: "protocolFeeReceiver()",
+  failedPaymentBalance: "failedPaymentBalance(address,address,address)",
+  withdrawFailedPayment: "withdrawFailedPayment(address,address)",
   balanceOf: "balanceOf(address)",
   allowance: "allowance(address,address)",
   approve: "approve(address,uint256)",
@@ -403,6 +414,12 @@ function marketDetails(kind) {
   if (kind === "plain") {
     return returns([addrWord(BASE), addrWord(QUOTE), word(BASE_MIN), word(QUOTE_MIN), addrWord(BANK)]);
   }
+  if (kind === "current") {
+    return returns([
+      addrWord(BASE), addrWord(QUOTE), word(BASE_MIN), word(QUOTE_MIN),
+      word(30), word(10000), word(18), addrWord(BANK),
+    ]);
+  }
   return returns([
     addrWord(BASE), addrWord(QUOTE), word(BASE_MIN), word(QUOTE_MIN),
     word(30), word(10000), addrWord(FEE), addrWord(BANK),
@@ -440,6 +457,8 @@ async function loadPage(options = {}) {
     ethBalance: 2n * 10n ** 18n,
     symbol: new Map([[BASE, "ZZB"], [QUOTE, "ZZQ"]]),
     decimals: new Map([[BASE, 18], [QUOTE, 6]]),
+    parked: new Map((options.parked || []).map(([token, amount]) => ["0x" + addrWord(token), amount])),
+    deepBook: Boolean(options.deepBook),
   };
 
   function answerCall(to, data) {
@@ -462,10 +481,27 @@ async function loadPage(options = {}) {
       const side = BigInt(argWord(data, 1));
       return returns([word(side === 1n ? 7 : 4)]);
     }
-    if (selector === SEL.getOrderBook) {
+    if (selector === SEL.protocolFeePercent) {
+      if (world.kind !== "current") {
+        const error = new Error("execution reverted");
+        error.code = 3;
+        error.data = "0x";
+        throw error;
+      }
+      return returns([word(50)]);
+    }
+    if (selector === SEL.protocolFeeReceiver) return returns([addrWord(FEE)]);
+    if (selector === SEL.failedPaymentBalance) {
+      return returns([word(world.parked.get(argWord(data, 2)) || 0n)]);
+    }
+    if (selector === SEL.getOrderBook || selector === SEL.getOrderBookWithStartId) {
       const side = BigInt(argWord(data, 1));
+      const start = selector === SEL.getOrderBookWithStartId ? BigInt(argWord(data, 3)) : 0n;
+      if (world.deepBook && side === 1n && start === 8n) {
+        return encodeOrders([{ user: OTHER, qty: ASK_QTY, price: ASK_PRICE + 1n, next: 0, prev: 7 }]);
+      }
       const order = side === 1n
-        ? { user: ACCOUNT, qty: ASK_QTY, price: ASK_PRICE, next: 0, prev: 0 }
+        ? { user: ACCOUNT, qty: ASK_QTY, price: ASK_PRICE, next: world.deepBook ? 8 : 0, prev: 0 }
         : { user: OTHER, qty: BID_QTY, price: BID_PRICE, next: 0, prev: 0 };
       return encodeOrders([order]);
     }
@@ -649,13 +685,15 @@ test("keccak256 matches the empty-string and transfer vectors", () => {
 test("page selectors and event topics are the MatchingOrderBook functions the page calls", async () => {
   const api = await loadPage();
   const used = [
-    "orderCounter", "placeOrder", "cancelOrder", "getMarketDetails", "getFirstOrderId", "getOrderBook",
+    "orderCounter", "placeOrder", "placeOrderReferrer", "placeOrderWithHint", "placeOrderWithHintReferrer",
+    "cancelOrder", "getMarketDetails", "getFirstOrderId", "getOrderBook", "getOrderBookWithStartId",
+    "protocolFeePercent", "protocolFeeReceiver", "failedPaymentBalance", "withdrawFailedPayment",
     "balanceOf", "allowance", "approve", "decimals", "symbol", "deposit", "withdraw",
   ];
   for (const name of used) {
     assert.equal(api.page.SEL[name], SEL[name], name + " should be " + SIGNATURES[name]);
   }
-  for (const name of ["createMarketFee", "createMarketPlain", "getMarketIdFee", "getMarketIdPlain"]) {
+  for (const name of ["createMarket", "createMarketFee", "createMarketPlain", "getMarketIdFee", "getMarketIdPlain"]) {
     assert.equal(api.page.SEL[name], undefined, name);
   }
   assert.equal(api.page.TOPIC_ORDER_FILL, TOPIC.TOPIC_ORDER_FILL);
@@ -697,6 +735,11 @@ test("boot reads the pinned exchange through the testnet RPC", async () => {
   const counter = callsWithSelector(api, SEL.orderCounter);
   assert.equal(counter[0].params[0].to.toLowerCase(), TESTNET.exchangeAddress.toLowerCase());
   assert.equal(counter[0].params[0].data, "0x" + SEL.orderCounter);
+  assert.equal(callsWithSelector(api, SEL.protocolFeePercent).length > 0, true);
+  assert.equal(callsWithSelector(api, SEL.failedPaymentBalance).length, 0);
+  assert.equal(api.$("referrer-row").hidden, true);
+  assert.equal(api.$("hint-row").hidden, true);
+  assert.equal(api.$("parked-row").hidden, true);
 });
 
 test("market details from getMarketDetails are what the form shows", async () => {
@@ -985,6 +1028,97 @@ test("a network with no recognized market says none is published", async () => {
   assert.equal(api.state.mode, "live");
   assert.equal(api.state.markets.length, 0);
   assert.equal(api.$("asks").textContent, "No market is published for this network.");
+});
+
+test("the current order book splits the taker fee and places an order with no referrer", async () => {
+  const api = await loadPage({ kind: "current" });
+  assert.equal(api.state.mode, "live", api.state.blockReason || api.state.banner);
+  assert.equal(api.state.interfaceKind, "current");
+  assert.equal(api.state.protocolFeePercent, 50n);
+  assert.equal(api.state.protocolFeeReceiver, FEE);
+  assert.equal(api.$("referrer-row").hidden, false);
+  assert.equal(api.$("hint-row").hidden, false);
+  assert.equal(api.$("parked-row").hidden, true);
+  assert.equal(api.$("fee-label").textContent, "Taker fee 0.3% (30/10000). Referrer receives 50% of the fee. Protocol receives 50% to 0xdddd…dddd.");
+  assert.match(api.$("banner").textContent, /Taker fees split between the order referrer and the protocol/);
+  assert.equal(api.$("orders-note").textContent, "Shows your orders on this market in the loaded book. A resting order that falls below the minimum is refunded.");
+  assert.equal(callsWithSelector(api, SEL.getOrderBookWithStartId).length, 0);
+  api.setInput("price-input", "100");
+  api.setInput("amount-input", "2");
+  api.click("place-button");
+  await settle();
+  assert.equal(sends(api)[0].params[0].data, calldata(SEL.placeOrder, [TESTNET.marketId, 0n, ASK_QTY, ASK_PRICE]));
+});
+
+test("a referrer and a book hint select the matching placeOrder overload", async () => {
+  const api = await loadPage({ kind: "current" });
+  api.setInput("price-input", "100");
+  api.setInput("amount-input", "2");
+  api.setInput("referrer-input", "not an address");
+  assert.equal(api.$("place-button").disabled, true);
+  assert.equal(api.$("form-message").textContent, "Enter a referrer address, or leave it blank.");
+  api.setInput("referrer-input", TESTNET.exchangeAddress);
+  assert.equal(api.$("form-message").textContent, "The exchange contract cannot be the referrer.");
+  api.setInput("referrer-input", FEE);
+  api.setInput("hint-input", "7");
+  assert.equal(api.$("place-button").disabled, false);
+  api.click("place-button");
+  await settle();
+  assert.equal(sends(api)[0].params[0].to.toLowerCase(), TESTNET.exchangeAddress.toLowerCase());
+  assert.equal(
+    sends(api)[0].params[0].data,
+    calldata(SEL.placeOrderWithHintReferrer, [TESTNET.marketId, 0n, ASK_QTY, ASK_PRICE, 7n, FEE]),
+  );
+});
+
+test("a referrer without a hint uses placeOrder with the referrer address", async () => {
+  const api = await loadPage({ kind: "current" });
+  api.setInput("price-input", "100");
+  api.setInput("amount-input", "2");
+  api.setInput("referrer-input", FEE);
+  api.click("place-button");
+  await settle();
+  assert.equal(sends(api)[0].params[0].data, calldata(SEL.placeOrderReferrer, [TESTNET.marketId, 0n, ASK_QTY, ASK_PRICE, FEE]));
+});
+
+test("a book hint without a referrer uses placeOrderWithHint", async () => {
+  const api = await loadPage({ kind: "current" });
+  api.setInput("price-input", "100");
+  api.setInput("amount-input", "2");
+  api.setInput("hint-input", "7");
+  api.click("place-button");
+  await settle();
+  assert.equal(sends(api)[0].params[0].data, calldata(SEL.placeOrderWithHint, [TESTNET.marketId, 0n, ASK_QTY, ASK_PRICE, 7n]));
+});
+
+test("a deep book continues with getOrderBookWithStartId", async () => {
+  const api = await loadPage({ kind: "current", deepBook: true });
+  const pages = callsWithSelector(api, SEL.getOrderBookWithStartId);
+  assert.equal(pages.length, 1);
+  assert.equal(argWord(pages[0].params[0].data, 0), TESTNET.marketId);
+  assert.equal(BigInt(argWord(pages[0].params[0].data, 1)), 1n);
+  assert.equal(BigInt(argWord(pages[0].params[0].data, 2)), 25n);
+  assert.equal(BigInt(argWord(pages[0].params[0].data, 3)), 8n);
+  assert.equal(bookLevels(api.document, "asks").length, 2);
+  assert.equal(api.state.bookTruncated, false);
+  assert.equal(bookLevels(api.document, "bids").length, 1);
+});
+
+test("parked balances withdraw through the market bank", async () => {
+  const api = await loadPage({ kind: "current", parked: [[BASE, 10n ** 18n], [QUOTE, 5n * 10n ** 6n]] });
+  assert.equal(api.$("parked-row").hidden, false);
+  assert.equal(api.$("parked-label").textContent, "Parked 1 ZZB · 5 ZZQ");
+  const reads = callsWithSelector(api, SEL.failedPaymentBalance);
+  assert.equal(reads.length >= 2, true);
+  assert.equal(argWord(reads[0].params[0].data, 0), "0x" + addrWord(ACCOUNT));
+  assert.equal(argWord(reads[0].params[0].data, 1), "0x" + addrWord(BANK));
+  api.click("withdraw-parked");
+  await settle();
+  const tx = sends(api);
+  assert.equal(tx.length, 2);
+  assert.equal(tx[0].params[0].to.toLowerCase(), TESTNET.exchangeAddress.toLowerCase());
+  assert.equal(tx[0].params[0].data, calldata(SEL.withdrawFailedPayment, [BANK, BASE]));
+  assert.equal(tx[1].params[0].data, calldata(SEL.withdrawFailedPayment, [BANK, QUOTE]));
 });
 
 test("a plain market shows that no fee is stored", async () => {
