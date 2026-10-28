@@ -357,9 +357,10 @@
 /* Call interface: MatchingOrderBook.sol in https://github.com/k26dr/solidity-dex
    The current contract stores base decimals on the market, splits the taker fee
    between the order referrer and the protocol, pages the book from a hint, and
-   parks a payment when a transfer fails. Robinhood Chain Testnet still hosts
-   the earlier deployment, which stores a fee receiver on the market. Markets
-   are the ids published for that chain. */
+   parks a payment when a transfer fails. Robinhood Chain Testnet hosts that
+   deployment. The protocol share is not readable from the contract, so this
+   page uses the share configured for the deployment. An older deployment stores
+   a fee receiver on the market instead. Markets are the ids published for that chain. */
 const APP = {
   bookDepth: 25,
   bookPages: 8,
@@ -376,9 +377,12 @@ const CHAINS = [
     rpcUrl: "https://rpc.testnet.chain.robinhood.com",
     explorerUrl: "https://explorer.testnet.chain.robinhood.com",
     wethAddress: "0x7943e237c7F95DA44E0301572D358911207852Fa",
-    exchangeAddress: "0x065c85B4a344B6135E2005f01B3aeaE6034e0C04",
+    exchangeAddress: "0x23740eF6E3Bf623F0A959e088891458bd6513Cfe",
+    protocolFeePercent: 50,
+    protocolFeeReceiver: "0x646BDE77b001AE117D596a0DE3A35Dc18370B2aC",
     marketIds: [
-      "0xac8bd66acee81d757189a757faafcb0e2f3caae8e60b417350b75e721af860b3",
+      "0x31a0156dabc688e7571d7da2f727289b156801a94e09a785ba52c75ba897919c",
+      "0x1cc586403b0ef7d8a33e52cf5e88cdfea55e708715a674c616cd9b1dc7af3552",
     ],
   },
   {
@@ -414,8 +418,6 @@ const SEL = {
   getFirstOrderId: "0ffffa5a",
   getOrderBook: "ee3069f7",
   getOrderBookWithStartId: "20d6d34b",
-  protocolFeePercent: "d6e6eb9f",
-  protocolFeeReceiver: "39a51be5",
   failedPaymentBalance: "d9f87383",
   withdrawFailedPayment: "c87a69c4",
   balanceOf: "70a08231",
@@ -678,7 +680,7 @@ function formatAmount(value, decimals) {
 function formatFeeRate(numerator, denominator) {
   if (denominator === 0n) return "—";
   const scaled = (numerator * 1000000n) / denominator;
-  return formatUnits(scaled, 4) + "% (" + numerator.toString() + "/" + denominator.toString() + ")";
+  return formatUnits(scaled, 4) + "%";
 }
 
 function quoteRaw(baseRaw, priceRaw, baseDecimals) {
@@ -805,14 +807,13 @@ function clearProtocolFee() {
   state.protocolFeeReceiver = null;
 }
 
-async function readProtocolFee() {
-  const percentHex = await ethCall(exchangeAddress(), encodeCall(SEL.protocolFeePercent));
-  const percentWords = decodeWords(percentHex);
-  if (percentWords.length !== 1 || percentWords[0] > 50n) return null;
-  const receiverHex = await ethCall(exchangeAddress(), encodeCall(SEL.protocolFeeReceiver));
-  const receiverWords = decodeWords(receiverHex);
-  if (receiverWords.length !== 1) return null;
-  return { percent: percentWords[0], receiver: wordToAddress(receiverWords[0]) };
+async function hasCurrentOrderBook() {
+  const hex = await ethCall(exchangeAddress(), encodeCall(SEL.failedPaymentBalance, [
+    encodeAddress("0x0000000000000000000000000000000000000000"),
+    encodeAddress("0x0000000000000000000000000000000000000000"),
+    encodeAddress("0x0000000000000000000000000000000000000000"),
+  ]));
+  return decodeWords(hex).length === 1;
 }
 
 async function probeExchange() {
@@ -843,22 +844,22 @@ async function probeExchange() {
     state.blockReason = "The configured contract does not expose orderCounter().";
     return false;
   }
-  let protocolFee = null;
+  let currentBook = false;
   try {
-    protocolFee = await readProtocolFee();
+    currentBook = await hasCurrentOrderBook();
   } catch (ignore) {
-    protocolFee = null;
+    currentBook = false;
   }
   const words = decodeWords(details).length;
-  if (protocolFee) {
+  if (currentBook) {
     if (words !== 8) {
       state.interfaceKind = null;
       state.blockReason = "getMarketDetails returned " + words + " words, not the published market struct.";
       return false;
     }
     state.interfaceKind = "current";
-    state.protocolFeePercent = protocolFee.percent;
-    state.protocolFeeReceiver = protocolFee.receiver;
+    state.protocolFeePercent = chain().protocolFeePercent == null ? null : BigInt(chain().protocolFeePercent);
+    state.protocolFeeReceiver = chain().protocolFeeReceiver ? normAddr(chain().protocolFeeReceiver) : null;
   } else if (words === 8) state.interfaceKind = "fee";
   else if (words === 5) state.interfaceKind = "plain";
   else {
@@ -1170,15 +1171,6 @@ async function loadLiveMarket() {
     state.wethBalance = weth;
     state.parkedBase = parkedBase;
     state.parkedQuote = parkedQuote;
-    if (state.interfaceKind === "current") {
-      try {
-        const protocolFee = await readProtocolFee();
-        if (protocolFee) {
-          state.protocolFeePercent = protocolFee.percent;
-          state.protocolFeeReceiver = protocolFee.receiver;
-        }
-      } catch (ignore) { /* keep the fee read during probe */ }
-    }
   } else {
     state.baseWallet = 0n;
     state.quoteWallet = 0n;
@@ -1382,16 +1374,16 @@ function placeOrderCall(intent) {
 
 function feeText(market) {
   if (!market || market.feeNum === null) return "Market fee is not stored on this deployment.";
+  const base = String(market.base.symbol || "").toUpperCase();
+  const quote = String(market.quote.symbol || "").toUpperCase();
+  if ((base === "ETH" || base === "WETH") && quote === "USDC") {
+    return "Maker fee 0%. Taker fee $0.02.";
+  }
   const rate = formatFeeRate(market.feeNum, market.feeDen);
   if (state.interfaceKind !== "current") {
     return "Market fee " + rate + " to " + shortAddress(market.feeReceiver);
   }
-  const protocol = state.protocolFeePercent == null ? 0n : state.protocolFeePercent;
-  const referrerShare = 100n - protocol;
-  const receiver = state.protocolFeeReceiver && !isZeroAddress(state.protocolFeeReceiver)
-    ? " to " + shortAddress(state.protocolFeeReceiver)
-    : "";
-  return "Taker fee " + rate + ". Referrer receives " + referrerShare.toString() + "% of the fee. Protocol receives " + protocol.toString() + "%" + receiver + ".";
+  return "Maker fee 0%. Taker fee " + rate + ".";
 }
 
 function renderMarketSelect() {
@@ -1777,9 +1769,9 @@ async function boot() {
     state.marketId = markets.some((market) => market.id === stored) ? stored : (markets[0] ? markets[0].id : null);
     const feeNote = state.interfaceKind === "plain"
       ? " This deployment has no fee fields on the market."
-      : state.interfaceKind === "current"
-        ? " Taker fees split between the order referrer and the protocol."
-        : " Fee fields are stored on the market id.";
+      : state.interfaceKind === "fee"
+        ? " Fee fields are stored on the market id."
+        : "";
     setBanner(chain().chainName + " · public RPC · exchange " + shortAddress(exchangeAddress()) + "." + feeNote, "ok");
     if (!markets.length) setStatus("No markets are published for " + chain().chainName + ".", null, "info");
     await refresh();

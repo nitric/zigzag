@@ -23,9 +23,11 @@ const TESTNET = {
   chainId: "0xb626",
   rpcUrl: "https://rpc.testnet.chain.robinhood.com",
   explorerUrl: "https://explorer.testnet.chain.robinhood.com",
-  exchangeAddress: "0x065c85B4a344B6135E2005f01B3aeaE6034e0C04",
+  exchangeAddress: "0x23740eF6E3Bf623F0A959e088891458bd6513Cfe",
   wethAddress: "0x7943e237c7F95DA44E0301572D358911207852Fa",
-  marketId: "0xac8bd66acee81d757189a757faafcb0e2f3caae8e60b417350b75e721af860b3",
+  marketId: "0x1cc586403b0ef7d8a33e52cf5e88cdfea55e708715a674c616cd9b1dc7af3552",
+  wethUsdcMarketId: "0x31a0156dabc688e7571d7da2f727289b156801a94e09a785ba52c75ba897919c",
+  protocolFeeReceiver: "0x646BDE77b001AE117D596a0DE3A35Dc18370B2aC",
 };
 
 const ACCOUNT = "0x1111111111111111111111111111111111111111";
@@ -65,8 +67,6 @@ const SIGNATURES = {
   getFirstOrderId: "getFirstOrderId(bytes32,uint8)",
   getOrderBook: "getOrderBook(bytes32,uint8,uint256)",
   getOrderBookWithStartId: "getOrderBookWithStartId(bytes32,uint8,uint256,uint128)",
-  protocolFeePercent: "protocolFeePercent()",
-  protocolFeeReceiver: "protocolFeeReceiver()",
   failedPaymentBalance: "failedPaymentBalance(address,address,address)",
   withdrawFailedPayment: "withdrawFailedPayment(address,address)",
   balanceOf: "balanceOf(address)",
@@ -455,7 +455,7 @@ async function loadPage(options = {}) {
       [QUOTE, 1000n * 10n ** 6n],
     ]),
     ethBalance: 2n * 10n ** 18n,
-    symbol: new Map([[BASE, "ZZB"], [QUOTE, "ZZQ"]]),
+    symbol: new Map([[BASE, options.baseSymbol || "ZZB"], [QUOTE, options.quoteSymbol || "ZZQ"]]),
     decimals: new Map([[BASE, 18], [QUOTE, 6]]),
     parked: new Map((options.parked || []).map(([token, amount]) => ["0x" + addrWord(token), amount])),
     deepBook: Boolean(options.deepBook),
@@ -481,17 +481,13 @@ async function loadPage(options = {}) {
       const side = BigInt(argWord(data, 1));
       return returns([word(side === 1n ? 7 : 4)]);
     }
-    if (selector === SEL.protocolFeePercent) {
+    if (selector === SEL.failedPaymentBalance) {
       if (world.kind !== "current") {
         const error = new Error("execution reverted");
         error.code = 3;
         error.data = "0x";
         throw error;
       }
-      return returns([word(50)]);
-    }
-    if (selector === SEL.protocolFeeReceiver) return returns([addrWord(FEE)]);
-    if (selector === SEL.failedPaymentBalance) {
       return returns([word(world.parked.get(argWord(data, 2)) || 0n)]);
     }
     if (selector === SEL.getOrderBook || selector === SEL.getOrderBookWithStartId) {
@@ -687,7 +683,7 @@ test("page selectors and event topics are the MatchingOrderBook functions the pa
   const used = [
     "orderCounter", "placeOrder", "placeOrderReferrer", "placeOrderWithHint", "placeOrderWithHintReferrer",
     "cancelOrder", "getMarketDetails", "getFirstOrderId", "getOrderBook", "getOrderBookWithStartId",
-    "protocolFeePercent", "protocolFeeReceiver", "failedPaymentBalance", "withdrawFailedPayment",
+    "failedPaymentBalance", "withdrawFailedPayment",
     "balanceOf", "allowance", "approve", "decimals", "symbol", "deposit", "withdraw",
   ];
   for (const name of used) {
@@ -713,7 +709,7 @@ test("Robinhood testnet is pinned and chains without a deployment have no exchan
   assert.equal(testnet.explorerUrl, TESTNET.explorerUrl);
   assert.equal(testnet.exchangeAddress, TESTNET.exchangeAddress);
   assert.equal(testnet.wethAddress, TESTNET.wethAddress);
-  assert.deepEqual([...testnet.marketIds], [TESTNET.marketId]);
+  assert.deepEqual([...testnet.marketIds], [TESTNET.wethUsdcMarketId, TESTNET.marketId]);
   for (const chain of api.page.CHAINS.filter((item) => item.key !== "robinhood-testnet")) {
     assert.equal(chain.exchangeAddress, "", chain.chainName + " should not ship an exchange address");
   }
@@ -735,8 +731,9 @@ test("boot reads the pinned exchange through the testnet RPC", async () => {
   const counter = callsWithSelector(api, SEL.orderCounter);
   assert.equal(counter[0].params[0].to.toLowerCase(), TESTNET.exchangeAddress.toLowerCase());
   assert.equal(counter[0].params[0].data, "0x" + SEL.orderCounter);
-  assert.equal(callsWithSelector(api, SEL.protocolFeePercent).length > 0, true);
-  assert.equal(callsWithSelector(api, SEL.failedPaymentBalance).length, 0);
+  assert.equal(callsWithSelector(api, SEL.failedPaymentBalance).length > 0, true);
+  assert.equal(api.page.SEL.protocolFeePercent, undefined);
+  assert.equal(api.page.SEL.protocolFeeReceiver, undefined);
   assert.equal(api.$("referrer-row").hidden, true);
   assert.equal(api.$("hint-row").hidden, true);
   assert.equal(api.$("parked-row").hidden, true);
@@ -750,10 +747,10 @@ test("market details from getMarketDetails are what the form shows", async () =>
   assert.equal(api.$("market-list").textContent, "ZZB/ZZQ");
   assert.equal(api.$("market-meta").textContent, "Min 1 ZZB · 10 ZZQ");
   assert.equal(api.$("min-label").textContent, "Minimum post 1 ZZB and 10 ZZQ");
-  assert.equal(api.$("fee-label").textContent, "Market fee 0.3% (30/10000) to 0xdddd…dddd");
+  assert.equal(api.$("fee-label").textContent, "Market fee 0.3% to 0xdddd…dddd");
   assert.equal(api.$("spender-label").textContent, "Spender " + TESTNET.exchangeAddress.toLowerCase());
   assert.match(api.$("banner").textContent, /Robinhood Chain Testnet/);
-  assert.match(api.$("banner").textContent, /0x065c…0c04/);
+  assert.match(api.$("banner").textContent, /0x2374…3cfe/);
 });
 
 test("the order book is read from the exchange and the prices are the contract values", async () => {
@@ -1035,12 +1032,13 @@ test("the current order book splits the taker fee and places an order with no re
   assert.equal(api.state.mode, "live", api.state.blockReason || api.state.banner);
   assert.equal(api.state.interfaceKind, "current");
   assert.equal(api.state.protocolFeePercent, 50n);
-  assert.equal(api.state.protocolFeeReceiver, FEE);
+  assert.equal(api.state.protocolFeeReceiver, TESTNET.protocolFeeReceiver.toLowerCase());
   assert.equal(api.$("referrer-row").hidden, false);
   assert.equal(api.$("hint-row").hidden, false);
   assert.equal(api.$("parked-row").hidden, true);
-  assert.equal(api.$("fee-label").textContent, "Taker fee 0.3% (30/10000). Referrer receives 50% of the fee. Protocol receives 50% to 0xdddd…dddd.");
-  assert.match(api.$("banner").textContent, /Taker fees split between the order referrer and the protocol/);
+  assert.equal(api.$("fee-label").textContent, "Maker fee 0%. Taker fee 0.3%.");
+  assert.equal(api.$("banner").textContent, "Robinhood Chain Testnet · public RPC · exchange 0x2374…3cfe.");
+  assert.doesNotMatch(api.$("banner").textContent, /referr/i);
   assert.equal(api.$("orders-note").textContent, "Shows your orders on this market in the loaded book. A resting order that falls below the minimum is refunded.");
   assert.equal(callsWithSelector(api, SEL.getOrderBookWithStartId).length, 0);
   api.setInput("price-input", "100");
@@ -1048,6 +1046,13 @@ test("the current order book splits the taker fee and places an order with no re
   api.click("place-button");
   await settle();
   assert.equal(sends(api)[0].params[0].data, calldata(SEL.placeOrder, [TESTNET.marketId, 0n, ASK_QTY, ASK_PRICE]));
+});
+
+test("WETH/USDC shows a zero maker fee and a two-cent taker fee", async () => {
+  const api = await loadPage({ kind: "current", baseSymbol: "WETH", quoteSymbol: "USDC" });
+  assert.equal(api.$("market-list").textContent, "WETH/USDC");
+  assert.equal(api.$("fee-label").textContent, "Maker fee 0%. Taker fee $0.02.");
+  assert.doesNotMatch(api.$("banner").textContent, /referr/i);
 });
 
 test("a referrer and a book hint select the matching placeOrder overload", async () => {
@@ -1109,9 +1114,9 @@ test("parked balances withdraw through the market bank", async () => {
   assert.equal(api.$("parked-row").hidden, false);
   assert.equal(api.$("parked-label").textContent, "Parked 1 ZZB · 5 ZZQ");
   const reads = callsWithSelector(api, SEL.failedPaymentBalance);
-  assert.equal(reads.length >= 2, true);
-  assert.equal(argWord(reads[0].params[0].data, 0), "0x" + addrWord(ACCOUNT));
-  assert.equal(argWord(reads[0].params[0].data, 1), "0x" + addrWord(BANK));
+  const accountRead = reads.find((call) => argWord(call.params[0].data, 0) === "0x" + addrWord(ACCOUNT));
+  assert.ok(accountRead, "failedPaymentBalance was not read for the wallet");
+  assert.equal(argWord(accountRead.params[0].data, 1), "0x" + addrWord(BANK));
   api.click("withdraw-parked");
   await settle();
   const tx = sends(api);
