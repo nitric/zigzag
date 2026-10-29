@@ -381,7 +381,7 @@ const CHAINS = [
     protocolFeePercent: 50,
     protocolFeeReceiver: "0x646BDE77b001AE117D596a0DE3A35Dc18370B2aC",
     marketIds: [
-      "0x31a0156dabc688e7571d7da2f727289b156801a94e09a785ba52c75ba897919c",
+      "0x0ce5eb9ef4b09372f80d304f95a4f1778d460483b3f1e35ddcebf631e681ff62",
       "0x1cc586403b0ef7d8a33e52cf5e88cdfea55e708715a674c616cd9b1dc7af3552",
     ],
   },
@@ -790,8 +790,15 @@ async function rpc(method, params) {
   throw new Error("No public RPC is configured.");
 }
 
+function chainIdNumber(chainId) {
+  if (chainId == null || chainId === "") return null;
+  try { return BigInt(chainId); } catch (ignore) { return null; }
+}
+
 function sameChain(chainId) {
-  return String(chainId || "").toLowerCase() === chain().chainId.toLowerCase();
+  const wallet = chainIdNumber(chainId);
+  const selected = chainIdNumber(chain().chainId);
+  return wallet != null && selected != null && wallet === selected;
 }
 
 async function ethCall(to, data) {
@@ -1374,11 +1381,6 @@ function placeOrderCall(intent) {
 
 function feeText(market) {
   if (!market || market.feeNum === null) return "Market fee is not stored on this deployment.";
-  const base = String(market.base.symbol || "").toUpperCase();
-  const quote = String(market.quote.symbol || "").toUpperCase();
-  if ((base === "ETH" || base === "WETH") && quote === "USDC") {
-    return "Maker fee 0%. Taker fee $0.02.";
-  }
   const rate = formatFeeRate(market.feeNum, market.feeDen);
   if (state.interfaceKind !== "current") {
     return "Market fee " + rate + " to " + shortAddress(market.feeReceiver);
@@ -1632,18 +1634,24 @@ function renderWallet() {
   const button = $("wallet-button");
   const network = $("network-label");
   if (!window.ethereum) {
+    network.hidden = false;
     network.textContent = "No wallet";
     button.textContent = "No wallet";
     return;
   }
+  if (state.account) {
+    network.hidden = true;
+    network.textContent = "";
+    button.textContent = shortAddress(state.account);
+    button.title = state.account;
+    return;
+  }
+  network.hidden = false;
+  button.title = "";
   if (!state.walletChainId) network.textContent = "Wallet";
   else if (sameChain(state.walletChainId)) network.textContent = chain().chainName;
   else network.textContent = "Wrong network";
-  if (!state.account) button.textContent = "Connect wallet";
-  else {
-    button.textContent = shortAddress(state.account);
-    button.title = state.account;
-  }
+  button.textContent = "Connect wallet";
 }
 
 function updateTradeState() {

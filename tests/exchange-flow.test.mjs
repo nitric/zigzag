@@ -26,7 +26,7 @@ const TESTNET = {
   exchangeAddress: "0x23740eF6E3Bf623F0A959e088891458bd6513Cfe",
   wethAddress: "0x7943e237c7F95DA44E0301572D358911207852Fa",
   marketId: "0x1cc586403b0ef7d8a33e52cf5e88cdfea55e708715a674c616cd9b1dc7af3552",
-  wethUsdcMarketId: "0x31a0156dabc688e7571d7da2f727289b156801a94e09a785ba52c75ba897919c",
+  wethUsdcMarketId: "0x0ce5eb9ef4b09372f80d304f95a4f1778d460483b3f1e35ddcebf631e681ff62",
   protocolFeeReceiver: "0x646BDE77b001AE117D596a0DE3A35Dc18370B2aC",
 };
 
@@ -986,6 +986,8 @@ test("a contract that fails the probe stays in demo and cannot send", async () =
 test("the wrong wallet network does not send a transaction", async () => {
   const api = await loadPage({ walletChainId: "0x1" });
   assert.equal(api.state.mode, "live");
+  assert.equal(api.$("network-label").hidden, true);
+  assert.equal(api.$("network-label").textContent, "");
   api.setInput("price-input", "100");
   api.setInput("amount-input", "2");
   assert.equal(api.$("place-button").disabled, true);
@@ -1048,10 +1050,11 @@ test("the current order book splits the taker fee and places an order with no re
   assert.equal(sends(api)[0].params[0].data, calldata(SEL.placeOrder, [TESTNET.marketId, 0n, ASK_QTY, ASK_PRICE]));
 });
 
-test("WETH/USDC shows a zero maker fee and a two-cent taker fee", async () => {
+test("WETH/USDC shows the market taker fee as a percent", async () => {
   const api = await loadPage({ kind: "current", baseSymbol: "WETH", quoteSymbol: "USDC" });
   assert.equal(api.$("market-list").textContent, "WETH/USDC");
-  assert.equal(api.$("fee-label").textContent, "Maker fee 0%. Taker fee $0.02.");
+  assert.equal(api.$("fee-label").textContent, "Maker fee 0%. Taker fee 0.3%.");
+  assert.equal(api.$("network-label").hidden, true);
   assert.doesNotMatch(api.$("banner").textContent, /referr/i);
 });
 
