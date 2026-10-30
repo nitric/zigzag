@@ -193,6 +193,8 @@
   #asks > *, #bids > * { flex: none; }
   #asks > :first-child { margin-top: auto; }
   .spread { flex: none; }
+  .spread > span:first-child { margin-right: auto; }
+  .spread .pct { color: var(--muted); }
   .level { position: relative; width: 100%; border: 0; background: transparent; color: inherit; padding-top: 1px; padding-bottom: 1px; text-align: inherit; }
   .level:hover { background: var(--hover); }
   .level .bar { position: absolute; top: 1px; bottom: 1px; right: 0; opacity: 0.22; pointer-events: none; }
@@ -202,7 +204,7 @@
   .level.bid .px { color: var(--bid); }
   .spread {
     display: flex;
-    justify-content: space-between;
+    gap: 8px;
     padding: 6px 10px;
     border-top: 1px solid var(--line);
     border-bottom: 1px solid var(--line);
@@ -474,6 +476,7 @@ const state = {
   asks: [],
   bids: [],
   bookTruncated: false,
+  bookLoading: false,
   baseWallet: 0n,
   quoteWallet: 0n,
   baseAllowance: 0n,
@@ -1175,6 +1178,7 @@ async function loadLiveMarket() {
     state.asks = [];
     state.bids = [];
     state.bookTruncated = false;
+    state.bookLoading = false;
     state.parkedBase = 0n;
     state.parkedQuote = 0n;
     return;
@@ -1183,9 +1187,11 @@ async function loadLiveMarket() {
     bookCalls(market.id, SELL),
     bookCalls(market.id, BUY),
   ]);
+  if (state.marketId !== market.id) return;
   state.asks = askResult.levels.map((level) => ({ ...level, side: SELL }));
   state.bids = bidResult.levels.map((level) => ({ ...level, side: BUY }));
   state.bookTruncated = askResult.truncated || bidResult.truncated;
+  state.bookLoading = false;
   if (state.account && sameChain(state.walletChainId)) {
     const parkedReads = state.interfaceKind === "current"
       ? [readFailedPayment(market.bank, market.base.address), readFailedPayment(market.bank, market.quote.address)]
@@ -1199,6 +1205,7 @@ async function loadLiveMarket() {
       readBalance(chain().wethAddress, state.account),
       ...parkedReads,
     ]);
+    if (state.marketId !== market.id) return;
     state.baseWallet = baseWallet;
     state.quoteWallet = quoteWallet;
     state.baseAllowance = baseAllowance;
@@ -1295,6 +1302,7 @@ function applyDemo() {
   state.asks = market.asks || [];
   state.bids = market.bids || [];
   state.bookTruncated = false;
+  state.bookLoading = false;
   state.baseWallet = 0n;
   state.quoteWallet = 0n;
   state.baseAllowance = 0n;
@@ -1319,12 +1327,16 @@ async function refresh() {
   try {
     do {
       state.refreshQueued = false;
+      const marketId = state.marketId;
       if (state.mode === "live") await loadLiveMarket();
       else if (state.mode === "demo") {
         const market = selectedMarket();
         state.asks = (market && market.asks) || [];
         state.bids = (market && market.bids) || [];
+        state.bookLoading = false;
       }
+      // A market switch during the load queued another refresh; let it render instead.
+      if (state.marketId !== marketId) continue;
       render();
     } while (state.refreshQueued);
   } catch (error) {
@@ -1478,14 +1490,21 @@ function renderBook() {
   for (const level of askRows.slice().reverse()) asks.appendChild(renderLevel(level, "ask", market));
   for (const level of bidRows) bids.appendChild(renderLevel(level, "bid", market));
   if (!askRows.length && !bidRows.length) {
-    asks.appendChild(el("div", "empty", "No orders on this market."));
+    asks.appendChild(el("div", "empty", state.bookLoading ? "Loading book…" : "No orders on this market."));
   }
   const spread = $("spread");
   spread.replaceChildren();
-  spread.appendChild(el("span", null, state.bookTruncated ? "Spread · book truncated" : "Spread"));
+  spread.appendChild(el("span", null, "Spread"));
   if (state.asks.length && state.bids.length) {
-    const delta = state.asks[0].price - state.bids[0].price;
+    const bestAsk = state.asks[0].price;
+    const bestBid = state.bids[0].price;
+    const delta = bestAsk - bestBid;
     spread.appendChild(el("span", "num", formatAmount(delta, market.quote.decimals)));
+    if (bestAsk + bestBid > 0n) {
+      // Percent of the mid price, to two decimals.
+      const hundredths = Number((delta * 20000n) / (bestAsk + bestBid));
+      spread.appendChild(el("span", "num pct", (hundredths / 100).toFixed(2) + "%"));
+    }
   } else {
     spread.appendChild(el("span", "num", "—"));
   }
@@ -2018,6 +2037,12 @@ function bind() {
     if (!button || button.getAttribute("data-market-id") === state.marketId) return;
     state.marketId = button.getAttribute("data-market-id");
     localStorage.setItem(storageKey("selected"), state.marketId);
+    state.asks = [];
+    state.bids = [];
+    state.bookTruncated = false;
+    state.bookLoading = state.mode === "live";
+    renderMarketSelect();
+    renderBook();
     refresh();
   });
   $("wallet-button").addEventListener("click", () => onWalletClick());
