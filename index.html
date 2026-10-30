@@ -76,9 +76,18 @@
   .banner.ok, .status.ok { background: #12241c; color: #9ee0c2; }
   .status { display: flex; gap: 12px; align-items: baseline; }
   .status a, td a { color: var(--accent); }
-  main { flex: 1; min-height: 0; display: flex; flex-direction: column; gap: 12px; padding: 12px; overflow: auto; }
-  .trade-row, .lower-row { display: flex; gap: 12px; align-items: stretch; }
-  .trade-row { flex: none; height: 100%; min-height: 0; }
+  main {
+    flex: 1;
+    min-height: 0;
+    padding: 12px;
+    overflow: auto;
+    display: grid;
+    gap: 12px;
+    grid-template-columns: 180px 340px minmax(260px, 2fr) minmax(0, 3fr);
+    grid-template-rows: minmax(0, 1fr);
+    align-items: stretch;
+  }
+  main > * { min-width: 0; min-height: 0; }
   .panel {
     background: var(--panel);
     border: 1px solid var(--line);
@@ -98,11 +107,9 @@
     border-bottom: 1px solid var(--line);
   }
   .panel .body { padding: 10px; display: flex; flex-direction: column; gap: 8px; }
-  .form-panel { flex: 0 0 340px; min-height: 0; }
   .form-panel .body { flex: 1 1 auto; min-height: 0; overflow-y: auto; }
-  .market-panel { flex: 0 0 180px; min-height: 0; }
   #market-list { flex: 1 1 auto; min-height: 0; overflow-y: auto; }
-  .book-panel { flex: 1 1 240px; min-width: 240px; min-height: 0; overflow: hidden; }
+  .book-panel { overflow: hidden; }
   .market-choice {
     display: block;
     width: 100%;
@@ -115,9 +122,21 @@
   .market-choice:hover { background: var(--hover); }
   .market-choice.is-active { background: var(--hover); color: var(--accent); box-shadow: inset 2px 0 0 var(--accent); }
   .market-meta { color: var(--muted); font-size: 11px; padding: 8px 10px; }
-  .lower-row { flex-wrap: wrap; }
-  .lower-row > .panel { flex: 1 1 360px; }
-  .fills-panel { flex: 1 1 100%; }
+  .side-column { display: flex; flex-direction: column; gap: 12px; }
+  .side-column > .panel { min-height: 0; max-width: 100%; }
+  .side-column > .panel > .body { flex: 1 1 auto; min-height: 0; overflow: auto; }
+  .side-column thead th { position: sticky; top: 0; background: var(--panel); z-index: 1; }
+  .balances-panel { flex: 0 0 auto; }
+  .orders-panel { flex: 0 1 auto; }
+  .fills-panel { flex: 1 1 auto; min-height: 140px; }
+  @media (max-width: 1200px) {
+    main { grid-template-columns: 180px 340px minmax(260px, 1fr); grid-template-rows: 100% auto; }
+    .side-column { grid-column: 1 / -1; min-height: auto; flex-direction: row; flex-wrap: wrap; }
+    .side-column > .panel, .fills-panel { flex: 1 1 360px; min-height: 0; }
+    .fills-panel { flex-basis: 100%; }
+    .side-column > .panel > .body { overflow: visible; }
+    .side-column thead th { position: static; }
+  }
   td.you { color: var(--accent); }
   .side-toggle { display: flex; gap: 6px; }
   .side-toggle button { flex: 1; border: 1px solid var(--line-strong); background: transparent; padding: 7px; border-radius: 4px; }
@@ -203,11 +222,14 @@
   @media (max-width: 960px) {
     header { flex-wrap: wrap; }
     .wallet-box { margin-left: 0; }
-    .trade-row, .lower-row { flex-direction: column; }
-    .trade-row { flex: none; height: auto; min-height: 0; }
-    .form-panel, .market-panel, .book-panel { flex-basis: auto; width: 100%; min-width: 0; }
+    main { grid-template-columns: minmax(0, 1fr); grid-template-rows: none; align-content: start; }
+    main > * { min-height: auto; }
+    .side-column { grid-column: auto; flex-direction: column; }
+    .side-column > .panel, .fills-panel { flex: none; }
+    .side-column > .panel > .body { overflow-x: auto; }
     .form-panel .body, #market-list { overflow-y: visible; }
-    .book-scroll { height: 420px; }
+    .book-panel { overflow: visible; }
+    .book-scroll { flex: none; height: 420px; }
   }
 </style>
 </head>
@@ -232,75 +254,73 @@
     <span id="tx-link"></span>
   </div>
   <main>
-    <div class="trade-row">
-      <section class="panel market-panel" aria-label="Markets">
-        <h2>Markets</h2>
-        <div id="market-list"></div>
-        <div class="market-meta num" id="market-meta">Select a market</div>
-      </section>
-      <section class="panel form-panel" aria-label="Order form">
-        <h2>Place order</h2>
-        <div class="body">
-          <div class="side-toggle">
-            <button type="button" id="side-buy" class="buy is-active">Buy</button>
-            <button type="button" id="side-sell" class="sell">Sell</button>
-          </div>
-          <label>Price <input id="price-input" inputmode="decimal" autocomplete="off" spellcheck="false" placeholder="0.00"></label>
-          <div class="amount-row">
-            <label>Amount <input id="amount-input" inputmode="decimal" autocomplete="off" spellcheck="false" placeholder="0.00"></label>
-            <button type="button" class="btn" id="max-amount">Max</button>
-          </div>
-          <div class="total-line num" id="total-output">Total —</div>
-          <div class="hint num" id="min-label">Minimum post —</div>
-          <div class="hint num" id="fee-label">Market fee —</div>
-          <label id="hint-row" hidden>Book hint
-            <input id="hint-input" inputmode="numeric" autocomplete="off" spellcheck="false" placeholder="Optional order id">
-          </label>
-          <div class="hint" id="parked-row" hidden>
-            <span class="num" id="parked-label">Parked —</span>
-            <button type="button" class="btn accent" id="withdraw-parked" disabled>Withdraw parked</button>
-          </div>
-          <div class="hint num" id="allowance-label">Allowance —</div>
-          <div class="hint" id="spender-label"></div>
-          <div class="form-message" id="form-message"></div>
-          <label class="check" id="fok-row" hidden>
-            <input type="checkbox" id="fok-check">
-            <span id="fok-label">This size is below the posted minimum. Confirming it submits a normal order.</span>
-          </label>
-          <div class="actions">
-            <button type="button" class="btn accent" id="approve-button" disabled>Approve</button>
-            <button type="button" class="btn" id="reset-allowance" hidden>Reset allowance to 0</button>
-            <button type="button" class="btn buy" id="place-button" disabled>Place order</button>
-          </div>
-          <div class="wrap-box">
-            <h2 style="padding:0;border:0;">ETH / WETH</h2>
-            <div class="hint num" id="eth-balance">ETH —</div>
-            <div class="hint num" id="weth-balance">WETH —</div>
-            <div class="hint" id="weth-contract"></div>
-            <label>Amount <input id="wrap-amount" inputmode="decimal" autocomplete="off" spellcheck="false" placeholder="0.00"></label>
-            <div class="wrap-actions">
-              <button type="button" class="btn" id="wrap-button" disabled>Wrap ETH</button>
-              <button type="button" class="btn" id="unwrap-button" disabled>Unwrap WETH</button>
-            </div>
+    <section class="panel market-panel" aria-label="Markets">
+      <h2>Markets</h2>
+      <div id="market-list"></div>
+      <div class="market-meta num" id="market-meta">Select a market</div>
+    </section>
+    <section class="panel form-panel" aria-label="Order form">
+      <h2>Place order</h2>
+      <div class="body">
+        <div class="side-toggle">
+          <button type="button" id="side-buy" class="buy is-active">Buy</button>
+          <button type="button" id="side-sell" class="sell">Sell</button>
+        </div>
+        <label>Price <input id="price-input" inputmode="decimal" autocomplete="off" spellcheck="false" placeholder="0.00"></label>
+        <div class="amount-row">
+          <label>Amount <input id="amount-input" inputmode="decimal" autocomplete="off" spellcheck="false" placeholder="0.00"></label>
+          <button type="button" class="btn" id="max-amount">Max</button>
+        </div>
+        <div class="total-line num" id="total-output">Total —</div>
+        <div class="hint num" id="min-label">Minimum post —</div>
+        <div class="hint num" id="fee-label">Market fee —</div>
+        <label id="hint-row" hidden>Book hint
+          <input id="hint-input" inputmode="numeric" autocomplete="off" spellcheck="false" placeholder="Optional order id">
+        </label>
+        <div class="hint" id="parked-row" hidden>
+          <span class="num" id="parked-label">Parked —</span>
+          <button type="button" class="btn accent" id="withdraw-parked" disabled>Withdraw parked</button>
+        </div>
+        <div class="hint num" id="allowance-label">Allowance —</div>
+        <div class="hint" id="spender-label"></div>
+        <div class="form-message" id="form-message"></div>
+        <label class="check" id="fok-row" hidden>
+          <input type="checkbox" id="fok-check">
+          <span id="fok-label">This size is below the posted minimum. Confirming it submits a normal order.</span>
+        </label>
+        <div class="actions">
+          <button type="button" class="btn accent" id="approve-button" disabled>Approve</button>
+          <button type="button" class="btn" id="reset-allowance" hidden>Reset allowance to 0</button>
+          <button type="button" class="btn buy" id="place-button" disabled>Place order</button>
+        </div>
+        <div class="wrap-box">
+          <h2 style="padding:0;border:0;">ETH / WETH</h2>
+          <div class="hint num" id="eth-balance">ETH —</div>
+          <div class="hint num" id="weth-balance">WETH —</div>
+          <div class="hint" id="weth-contract"></div>
+          <label>Amount <input id="wrap-amount" inputmode="decimal" autocomplete="off" spellcheck="false" placeholder="0.00"></label>
+          <div class="wrap-actions">
+            <button type="button" class="btn" id="wrap-button" disabled>Wrap ETH</button>
+            <button type="button" class="btn" id="unwrap-button" disabled>Unwrap WETH</button>
           </div>
         </div>
-      </section>
-      <section class="panel book-panel" aria-label="Order book">
-        <h2>Order book</h2>
-        <div class="book-head num">
-          <span id="book-price-label">Price</span>
-          <span id="book-size-label">Size</span>
-          <span id="book-total-label">Total</span>
-        </div>
-        <div class="book-scroll" id="book-rows">
-          <div id="asks"></div>
-          <div class="spread num" id="spread"><span>Spread</span><span>—</span></div>
-          <div id="bids"></div>
-        </div>
-      </section>
-    </div>
-    <div class="lower-row">
-      <section class="panel" aria-label="Balances">
+      </div>
+    </section>
+    <section class="panel book-panel" aria-label="Order book">
+      <h2>Order book</h2>
+      <div class="book-head num">
+        <span id="book-price-label">Price</span>
+        <span id="book-size-label">Size</span>
+        <span id="book-total-label">Total</span>
+      </div>
+      <div class="book-scroll" id="book-rows">
+        <div id="asks"></div>
+        <div class="spread num" id="spread"><span>Spread</span><span>—</span></div>
+        <div id="bids"></div>
+      </div>
+    </section>
+    <div class="side-column">
+      <section class="panel balances-panel" aria-label="Balances">
         <h2>Balances</h2>
         <div class="body" style="padding:0;">
           <table>
@@ -318,7 +338,7 @@
           <div class="empty" id="balance-note">Available is the wallet balance a new order can draw on. Reserved tokens are already escrowed in the market bank.</div>
         </div>
       </section>
-      <section class="panel" aria-label="Active orders">
+      <section class="panel orders-panel" aria-label="Active orders">
         <h2>Active orders</h2>
         <div class="body" style="padding:0;">
           <table>
