@@ -58,7 +58,6 @@
     border-radius: 4px;
     padding: 6px 8px;
   }
-  #network-label { color: var(--muted); font-size: 12px; }
   #wallet-button, .btn {
     border-radius: 4px;
     border: 1px solid var(--line-strong);
@@ -79,7 +78,7 @@
   .status a, td a { color: var(--accent); }
   main { flex: 1; min-height: 0; display: flex; flex-direction: column; gap: 12px; padding: 12px; overflow: auto; }
   .trade-row, .lower-row { display: flex; gap: 12px; align-items: stretch; }
-  .trade-row { flex: 1 1 auto; }
+  .trade-row { flex: none; height: 100%; min-height: 0; }
   .panel {
     background: var(--panel);
     border: 1px solid var(--line);
@@ -99,9 +98,11 @@
     border-bottom: 1px solid var(--line);
   }
   .panel .body { padding: 10px; display: flex; flex-direction: column; gap: 8px; }
-  .form-panel { flex: 0 0 340px; }
-  .market-panel { flex: 0 0 180px; }
-  .book-panel { flex: 1 1 240px; min-width: 240px; min-height: 0; }
+  .form-panel { flex: 0 0 340px; min-height: 0; }
+  .form-panel .body { flex: 1 1 auto; min-height: 0; overflow-y: auto; }
+  .market-panel { flex: 0 0 180px; min-height: 0; }
+  #market-list { flex: 1 1 auto; min-height: 0; overflow-y: auto; }
+  .book-panel { flex: 1 1 240px; min-width: 240px; min-height: 0; overflow: hidden; }
   .market-choice {
     display: block;
     width: 100%;
@@ -157,11 +158,22 @@
   .book-scroll {
     flex: 1 1 auto;
     min-height: 0;
-    overflow: auto;
+    overflow: hidden;
     display: flex;
     flex-direction: column;
   }
-  #asks { margin-top: auto; }
+  #asks, #bids {
+    flex: 1 1 0;
+    min-height: 0;
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+    scrollbar-width: thin;
+  }
+  #asks::-webkit-scrollbar, #bids::-webkit-scrollbar { width: 6px; }
+  #asks > *, #bids > * { flex: none; }
+  #asks > :first-child { margin-top: auto; }
+  .spread { flex: none; }
   .level { position: relative; width: 100%; border: 0; background: transparent; color: inherit; padding-top: 1px; padding-bottom: 1px; text-align: inherit; }
   .level:hover { background: var(--hover); }
   .level .bar { position: absolute; top: 1px; bottom: 1px; right: 0; opacity: 0.22; pointer-events: none; }
@@ -192,9 +204,10 @@
     header { flex-wrap: wrap; }
     .wallet-box { margin-left: 0; }
     .trade-row, .lower-row { flex-direction: column; }
-    .trade-row { flex: none; min-height: 0; }
+    .trade-row { flex: none; height: auto; min-height: 0; }
     .form-panel, .market-panel, .book-panel { flex-basis: auto; width: 100%; min-width: 0; }
-    .book-scroll { min-height: 280px; }
+    .form-panel .body, #market-list { overflow-y: visible; }
+    .book-scroll { height: 420px; }
   }
 </style>
 </head>
@@ -210,7 +223,6 @@
     </div>
     <div class="wallet-box">
       <select id="chain-select" aria-label="Network"></select>
-      <span id="network-label">Wallet</span>
       <button type="button" id="wallet-button">Connect wallet</button>
     </div>
   </header>
@@ -1433,6 +1445,7 @@ function renderBook() {
   const market = selectedMarket();
   const asks = $("asks");
   const bids = $("bids");
+  const askGap = Math.max(0, (asks.scrollHeight || 0) - (asks.clientHeight || 0) - (asks.scrollTop || 0));
   asks.replaceChildren();
   bids.replaceChildren();
   if (!market) {
@@ -1455,6 +1468,9 @@ function renderBook() {
     spread.appendChild(el("span", "num", formatAmount(delta, market.quote.decimals)));
   } else {
     spread.appendChild(el("span", "num", "—"));
+  }
+  if (typeof asks.scrollHeight === "number") {
+    asks.scrollTop = Math.max(0, asks.scrollHeight - asks.clientHeight - askGap);
   }
 }
 
@@ -1628,25 +1644,16 @@ function renderChainSelect() {
 
 function renderWallet() {
   const button = $("wallet-button");
-  const network = $("network-label");
   if (!window.ethereum) {
-    network.hidden = false;
-    network.textContent = "No wallet";
     button.textContent = "No wallet";
     return;
   }
   if (state.account) {
-    network.hidden = true;
-    network.textContent = "";
     button.textContent = shortAddress(state.account);
     button.title = state.account;
     return;
   }
-  network.hidden = false;
   button.title = "";
-  if (!state.walletChainId) network.textContent = "Wallet";
-  else if (sameChain(state.walletChainId)) network.textContent = chain().chainName;
-  else network.textContent = "Wrong network";
   button.textContent = "Connect wallet";
 }
 
@@ -2018,6 +2025,13 @@ function bind() {
       $("form-message").textContent = error.message;
     }
   });
+  if (typeof ResizeObserver === "function") {
+    // Keep the best ask against the spread when the book panel changes size.
+    new ResizeObserver(() => {
+      const asks = $("asks");
+      asks.scrollTop = asks.scrollHeight;
+    }).observe($("asks"));
+  }
   $("book-rows").addEventListener("click", (event) => {
     const row = event.target.closest("[data-price]");
     if (!row) return;

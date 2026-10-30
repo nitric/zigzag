@@ -986,8 +986,6 @@ test("a contract that fails the probe stays in demo and cannot send", async () =
 test("the wrong wallet network does not send a transaction", async () => {
   const api = await loadPage({ walletChainId: "0x1" });
   assert.equal(api.state.mode, "live");
-  assert.equal(api.$("network-label").hidden, true);
-  assert.equal(api.$("network-label").textContent, "");
   api.setInput("price-input", "100");
   api.setInput("amount-input", "2");
   assert.equal(api.$("place-button").disabled, true);
@@ -1054,7 +1052,6 @@ test("WETH/USDC shows the market taker fee as a percent", async () => {
   const api = await loadPage({ kind: "current", baseSymbol: "WETH", quoteSymbol: "USDC" });
   assert.equal(api.$("market-list").textContent, "WETH/USDC");
   assert.equal(api.$("fee-label").textContent, "Maker fee 0%. Taker fee 0.3%.");
-  assert.equal(api.$("network-label").hidden, true);
   assert.doesNotMatch(api.$("banner").textContent, /referr/i);
 });
 
