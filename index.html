@@ -241,9 +241,6 @@
           <div class="total-line num" id="total-output">Total —</div>
           <div class="hint num" id="min-label">Minimum post —</div>
           <div class="hint num" id="fee-label">Market fee —</div>
-          <label id="referrer-row" hidden>Referrer
-            <input id="referrer-input" autocomplete="off" spellcheck="false" placeholder="Optional 0x address">
-          </label>
           <label id="hint-row" hidden>Book hint
             <input id="hint-input" inputmode="numeric" autocomplete="off" spellcheck="false" placeholder="Optional order id">
           </label>
@@ -1345,7 +1342,6 @@ function tradeIntent() {
 
 function orderExtras() {
   if (state.interfaceKind !== "current") return { ok: true, referrer: "", hint: null };
-  const referrer = $("referrer-input").value.trim();
   const hintText = $("hint-input").value.trim();
   if (referrer && (!isAddress(referrer) || isZeroAddress(referrer))) {
     return { ok: false, reason: "Enter a referrer address, or leave it blank." };
@@ -1710,7 +1706,6 @@ function updateTradeState() {
 
 function renderOrderExtras() {
   const current = state.interfaceKind === "current" && state.mode === "live";
-  $("referrer-row").hidden = !current;
   $("hint-row").hidden = !current;
   const market = selectedMarket();
   const showParked = current && market && state.account && (state.parkedBase > 0n || state.parkedQuote > 0n);
@@ -2001,7 +1996,7 @@ function bind() {
   $("wallet-button").addEventListener("click", () => onWalletClick());
   $("side-buy").addEventListener("click", () => { state.side = BUY; $("side-buy").classList.add("is-active"); $("side-sell").classList.remove("is-active"); updateTradeState(); });
   $("side-sell").addEventListener("click", () => { state.side = SELL; $("side-sell").classList.add("is-active"); $("side-buy").classList.remove("is-active"); updateTradeState(); });
-  for (const id of ["price-input", "amount-input", "wrap-amount", "referrer-input", "hint-input"]) {
+  for (const id of ["price-input", "amount-input", "wrap-amount", "hint-input"]) {
     $(id).addEventListener("input", updateTradeState);
   }
   $("fok-check").addEventListener("change", updateTradeState);
