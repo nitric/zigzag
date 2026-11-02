@@ -23,12 +23,13 @@ const TESTNET = {
   chainId: "0xb626",
   rpcUrl: "https://rpc.testnet.chain.robinhood.com",
   explorerUrl: "https://explorer.testnet.chain.robinhood.com",
-  exchangeAddress: "0x23740eF6E3Bf623F0A959e088891458bd6513Cfe",
-  wethAddress: "0x7943e237c7F95DA44E0301572D358911207852Fa",
-  marketId: "0x1cc586403b0ef7d8a33e52cf5e88cdfea55e708715a674c616cd9b1dc7af3552",
-  wethUsdcMarketId: "0x0ce5eb9ef4b09372f80d304f95a4f1778d460483b3f1e35ddcebf631e681ff62",
+  exchangeAddress: "0x3d9B1887B10ee3d94fbDEA1592Fe80a460A6d9bD",
+  marketId: "0x2202c65c0448414d0774a494108c658631f4495729c172792d38b5cfd22e166e",
+  ethUsdcMarketId: "0xa223cc2d5cbbb1daad80d48e3baa172f400d0f2f16ce44708f6b968b09e5dbbc",
   protocolFeeReceiver: "0x646BDE77b001AE117D596a0DE3A35Dc18370B2aC",
 };
+const NATIVE = "0x0000000000000000000000000000000000000000";
+const USDC = "0x7BfD87769EC270a479831664725Ebf002a3d9FCd";
 
 const ACCOUNT = "0x1111111111111111111111111111111111111111";
 const OTHER = "0x2222222222222222222222222222222222222222";
@@ -57,8 +58,8 @@ const SIGNATURES = {
   createMarketPlain: "createMarket(address,address,uint256,uint256)",
   placeOrder: "placeOrder(bytes32,uint8,uint256,uint256)",
   placeOrderReferrer: "placeOrder(bytes32,uint8,uint256,uint256,address)",
-  placeOrderWithHint: "placeOrderWithHint(bytes32,uint8,uint256,uint256,uint128)",
-  placeOrderWithHintReferrer: "placeOrderWithHint(bytes32,uint8,uint256,uint256,uint128,address)",
+  placeOrderWithHint: "placeOrderWithHint(bytes32,uint8,uint256,uint256,uint128,bool)",
+  placeOrderWithHintReferrer: "placeOrderWithHint(bytes32,uint8,uint256,uint256,uint128,bool,address)",
   cancelOrder: "cancelOrder(bytes32,uint8,uint128)",
   createMarket: "createMarket(address,address,uint256,uint256,uint256,uint256)",
   getMarketIdFee: "getMarketId(address,address,uint256,uint256,uint256,uint256,address)",
@@ -74,12 +75,11 @@ const SIGNATURES = {
   approve: "approve(address,uint256)",
   decimals: "decimals()",
   symbol: "symbol()",
-  deposit: "deposit()",
-  withdraw: "withdraw(uint256)",
+  name: "name()",
 };
 
 const EVENTS = {
-  TOPIC_ORDER_FILL: "OrderFill(uint256,address,address,bytes32,uint256,uint256)",
+  TOPIC_ORDER_FILL: "OrderFill(uint256,address,address,bytes32,uint256,uint256,address)",
   TOPIC_MARKET_FEE: "MarketCreated(bytes32,address,address,uint256,uint256,uint256,uint256,address,address)",
   TOPIC_MARKET_PLAIN: "MarketCreated(bytes32,address,address,uint256,uint256,address)",
 };
@@ -410,18 +410,20 @@ function emptyDetails(kind) {
   return returns(Array(kind === "plain" ? 5 : 8).fill(word(0)));
 }
 
-function marketDetails(kind) {
+function marketDetails(kind, options = {}) {
+  const base = options.base || BASE;
+  const quote = options.quote || QUOTE;
   if (kind === "plain") {
-    return returns([addrWord(BASE), addrWord(QUOTE), word(BASE_MIN), word(QUOTE_MIN), addrWord(BANK)]);
+    return returns([addrWord(base), addrWord(quote), word(BASE_MIN), word(QUOTE_MIN), addrWord(BANK)]);
   }
   if (kind === "current") {
     return returns([
-      addrWord(BASE), addrWord(QUOTE), word(BASE_MIN), word(QUOTE_MIN),
+      addrWord(base), addrWord(quote), word(BASE_MIN), word(QUOTE_MIN),
       word(30), word(10000), word(18), addrWord(BANK),
     ]);
   }
   return returns([
-    addrWord(BASE), addrWord(QUOTE), word(BASE_MIN), word(QUOTE_MIN),
+    addrWord(base), addrWord(quote), word(BASE_MIN), word(QUOTE_MIN),
     word(30), word(10000), addrWord(FEE), addrWord(BANK),
   ]);
 }
@@ -433,6 +435,8 @@ async function loadPage(options = {}) {
   const initial = {};
   if (options.chainKey) initial["zigzag-exchange-v1:network"] = options.chainKey;
   if (options.savedExchange) initial[storageKey] = options.savedExchange;
+  // Most flow tests assume an already-connected wallet; TOS suites opt out.
+  if (options.tosAccepted !== false) initial["zigzag-exchange-v1:tos-accepted"] = "1";
   const localStorage = memoryStorage(initial);
   const calls = [];
   const world = {
@@ -448,26 +452,37 @@ async function loadPage(options = {}) {
     balance: new Map([
       [BASE, 5n * 10n ** 18n],
       [QUOTE, 1000n * 10n ** 6n],
-      [TESTNET.wethAddress.toLowerCase(), 4n * 10n ** 18n],
+      [USDC.toLowerCase(), 1000n * 10n ** 6n],
     ]),
     allowance: new Map([
       [BASE, 0n],
       [QUOTE, 1000n * 10n ** 6n],
+      [USDC.toLowerCase(), 1000n * 10n ** 6n],
     ]),
     ethBalance: 2n * 10n ** 18n,
-    symbol: new Map([[BASE, options.baseSymbol || "ZZB"], [QUOTE, options.quoteSymbol || "ZZQ"]]),
-    decimals: new Map([[BASE, 18], [QUOTE, 6]]),
+    symbol: new Map([
+      [BASE, options.baseSymbol || "EUROT"],
+      [QUOTE, options.quoteSymbol || "USDC"],
+      [USDC.toLowerCase(), "USDC"],
+    ]),
+    name: new Map([
+      [BASE, options.baseName || "Euro Token"],
+      [QUOTE, options.quoteName || "USD Coin"],
+      [USDC.toLowerCase(), "USD Coin"],
+    ]),
+    decimals: new Map([[BASE, 18], [QUOTE, 6], [USDC.toLowerCase(), 6]]),
     parked: new Map((options.parked || []).map(([token, amount]) => ["0x" + addrWord(token), amount])),
     deepBook: Boolean(options.deepBook),
+    nativeMarket: Boolean(options.nativeMarket),
   };
 
   function answerCall(to, data) {
     const address = String(to || "").toLowerCase();
     const selector = selectorFromData(data);
     const id = argWord(data, 0);
-    if (address === TESTNET.wethAddress.toLowerCase() && selector === SEL.balanceOf) return returns([word(world.balance.get(address) || 0n)]);
-    if (world.symbol.has(address) || address === BASE || address === QUOTE) {
+    if (world.symbol.has(address) || address === BASE || address === QUOTE || address === USDC.toLowerCase()) {
       if (selector === SEL.symbol) return "0x" + textWord(world.symbol.get(address) || "TOK");
+      if (selector === SEL.name) return "0x" + textWord(world.name.get(address) || world.symbol.get(address) || "Token");
       if (selector === SEL.decimals) return returns([word(world.decimals.get(address) ?? 18)]);
       if (selector === SEL.balanceOf) return returns([word(world.balance.get(address) || 0n)]);
       if (selector === SEL.allowance) return returns([word(world.allowance.get(address) || 0n)]);
@@ -475,7 +490,11 @@ async function loadPage(options = {}) {
     }
     if (selector === SEL.orderCounter) return options.badCounter ? "0x" : returns([word(1)]);
     if (selector === SEL.getMarketDetails) {
-      return world.validMarkets.has(id) ? marketDetails(world.kind) : emptyDetails(world.kind);
+      if (!world.validMarkets.has(id)) return emptyDetails(world.kind);
+      if (world.nativeMarket && id === TESTNET.ethUsdcMarketId) {
+        return marketDetails(world.kind, { base: NATIVE, quote: USDC });
+      }
+      return marketDetails(world.kind);
     }
     if (selector === SEL.getFirstOrderId) {
       const side = BigInt(argWord(data, 1));
@@ -546,7 +565,11 @@ async function loadPage(options = {}) {
       async request({ method, params }) {
         calls.push({ channel: "wallet", method, params, url: "" });
         if (method === "eth_chainId") return world.walletChainId;
-        if (method === "eth_accounts" || method === "eth_requestAccounts") return world.account ? [world.account] : [];
+        if (method === "eth_accounts") return world.account ? [world.account] : [];
+        if (method === "eth_requestAccounts") {
+          if (!world.account) world.account = options.connectAccount === undefined ? ACCOUNT : options.connectAccount;
+          return world.account ? [world.account] : [];
+        }
         if (method === "eth_call" || method === "eth_getBalance" || method === "eth_getCode" || method === "eth_getLogs" || method === "eth_blockNumber" || method === "eth_getTransactionReceipt") {
           return answerRpc(method, params);
         }
@@ -684,12 +707,12 @@ test("page selectors and event topics are the MatchingOrderBook functions the pa
     "orderCounter", "placeOrder", "placeOrderReferrer", "placeOrderWithHint", "placeOrderWithHintReferrer",
     "cancelOrder", "getMarketDetails", "getFirstOrderId", "getOrderBook", "getOrderBookWithStartId",
     "failedPaymentBalance", "withdrawFailedPayment",
-    "balanceOf", "allowance", "approve", "decimals", "symbol", "deposit", "withdraw",
+    "balanceOf", "allowance", "approve", "decimals", "symbol", "name",
   ];
   for (const name of used) {
     assert.equal(api.page.SEL[name], SEL[name], name + " should be " + SIGNATURES[name]);
   }
-  for (const name of ["createMarket", "createMarketFee", "createMarketPlain", "getMarketIdFee", "getMarketIdPlain"]) {
+  for (const name of ["createMarket", "createMarketFee", "createMarketPlain", "getMarketIdFee", "getMarketIdPlain", "deposit", "withdraw"]) {
     assert.equal(api.page.SEL[name], undefined, name);
   }
   assert.equal(api.page.TOPIC_ORDER_FILL, TOPIC.TOPIC_ORDER_FILL);
@@ -699,6 +722,57 @@ test("page selectors and event topics are the MatchingOrderBook functions the pa
   assert.equal(api.$("compute-id"), null);
   assert.equal(api.$("market-id-input"), null);
   assert.equal(api.$("exchange-address"), null);
+  assert.equal(api.$("wrap-button"), null);
+  assert.equal(api.$("unwrap-button"), null);
+  assert.ok(api.$("tos-modal"));
+  assert.equal(api.$("tos-modal").hidden, true);
+});
+
+test("connect wallet shows the terms modal until agreed", async () => {
+  const api = await loadPage({ account: null, tosAccepted: false });
+  assert.equal(api.state.account, null);
+  assert.equal(api.$("tos-modal").hidden, true);
+  api.click("wallet-button");
+  assert.equal(api.$("tos-modal").hidden, false);
+  assert.equal(sends(api).length, 0);
+  assert.equal(api.calls.some((call) => call.channel === "wallet" && call.method === "eth_requestAccounts"), false);
+
+  api.click("tos-cancel");
+  assert.equal(api.$("tos-modal").hidden, true);
+  assert.equal(api.localStorage.getItem("zigzag-exchange-v1:tos-accepted"), null);
+
+  api.click("wallet-button");
+  api.click("tos-agree");
+  await settle();
+  assert.equal(api.$("tos-modal").hidden, true);
+  assert.equal(api.localStorage.getItem("zigzag-exchange-v1:tos-accepted"), "1");
+  assert.equal(api.state.account, ACCOUNT);
+  assert.equal(api.calls.some((call) => call.channel === "wallet" && call.method === "eth_requestAccounts"), true);
+
+  api.state.account = null;
+  api.click("wallet-button");
+  await settle();
+  assert.equal(api.$("tos-modal").hidden, true);
+  assert.equal(api.state.account, ACCOUNT);
+});
+
+test("an already-authorized wallet still gets the terms modal until agreed", async () => {
+  const api = await loadPage({ tosAccepted: false });
+  assert.equal(api.state.account, null);
+  assert.equal(api.$("tos-modal").hidden, false);
+  assert.equal(api.$("wallet-button").textContent, "Connect wallet");
+  api.click("tos-cancel");
+  await settle();
+  assert.equal(api.state.account, null);
+  assert.equal(api.$("tos-modal").hidden, true);
+
+  api.click("wallet-button");
+  assert.equal(api.$("tos-modal").hidden, false);
+  api.click("tos-agree");
+  await settle();
+  assert.equal(api.localStorage.getItem("zigzag-exchange-v1:tos-accepted"), "1");
+  assert.equal(api.state.account, ACCOUNT);
+  assert.equal(api.$("tos-modal").hidden, true);
 });
 
 test("Robinhood testnet is pinned and chains without a deployment have no exchange", async () => {
@@ -708,8 +782,8 @@ test("Robinhood testnet is pinned and chains without a deployment have no exchan
   assert.equal(testnet.rpcUrl, TESTNET.rpcUrl);
   assert.equal(testnet.explorerUrl, TESTNET.explorerUrl);
   assert.equal(testnet.exchangeAddress, TESTNET.exchangeAddress);
-  assert.equal(testnet.wethAddress, TESTNET.wethAddress);
-  assert.deepEqual([...testnet.marketIds], [TESTNET.wethUsdcMarketId, TESTNET.marketId]);
+  assert.equal(testnet.wethAddress, undefined);
+  assert.deepEqual([...testnet.marketIds], [TESTNET.ethUsdcMarketId, TESTNET.marketId]);
   for (const chain of api.page.CHAINS.filter((item) => item.key !== "robinhood-testnet")) {
     assert.equal(chain.exchangeAddress, "", chain.chainName + " should not ship an exchange address");
   }
@@ -734,8 +808,9 @@ test("boot reads the pinned exchange through the testnet RPC", async () => {
   assert.equal(callsWithSelector(api, SEL.failedPaymentBalance).length > 0, true);
   assert.equal(api.page.SEL.protocolFeePercent, undefined);
   assert.equal(api.page.SEL.protocolFeeReceiver, undefined);
-  assert.equal(api.$("referrer-row").hidden, true);
+  assert.equal(api.$("referrer-row"), null);
   assert.equal(api.$("hint-row").hidden, true);
+  assert.equal(api.$("hint-soft-row").hidden, true);
   assert.equal(api.$("parked-row").hidden, true);
 });
 
@@ -744,13 +819,14 @@ test("market details from getMarketDetails are what the form shows", async () =>
   const detail = callsWithSelector(api, SEL.getMarketDetails).find((call) => argWord(call.params[0].data, 0) === TESTNET.marketId);
   assert.ok(detail, "getMarketDetails was not called for the pinned market");
   assert.equal(detail.params[0].to.toLowerCase(), TESTNET.exchangeAddress.toLowerCase());
-  assert.equal(api.$("market-list").textContent, "ZZB/ZZQ");
-  assert.equal(api.$("market-meta").textContent, "Min 1 ZZB · 10 ZZQ");
-  assert.equal(api.$("min-label").textContent, "Minimum post 1 ZZB and 10 ZZQ");
+  assert.equal(api.$("market-list").textContent, "EUROT/USDC");
+  assert.equal(api.$("market-list").querySelectorAll(".market-choice")[0].title, "Euro Token / USD Coin");
+  assert.equal(api.$("market-meta").textContent, "Min 1 EUROT · 10 USDC");
+  assert.equal(api.$("min-label").textContent, "Minimum post 1 EUROT and 10 USDC");
   assert.equal(api.$("fee-label").textContent, "Market fee 0.3% to 0xdddd…dddd");
   assert.equal(api.$("spender-label").textContent, "Spender " + TESTNET.exchangeAddress.toLowerCase());
   assert.match(api.$("banner").textContent, /Robinhood Chain Testnet/);
-  assert.match(api.$("banner").textContent, /0x2374…3cfe/);
+  assert.match(api.$("banner").textContent, /0x3d9b…d9bd/);
 });
 
 test("the order book is read from the exchange and the prices are the contract values", async () => {
@@ -768,7 +844,7 @@ test("the order book is read from the exchange and the prices are the contract v
   assert.deepEqual(bookLevels(api.document, "bids"), [["90", "3", "270"]]);
   assert.equal(api.$("asks").querySelectorAll(".level")[0].children[0].style.width, "100%");
   assert.equal(api.$("spread").children[1].textContent, "10");
-  assert.deepEqual(tableRows(api.document, "orders-body"), [["Sell", "100", "2 ZZB", "2 ZZB", "Cancel"]]);
+  assert.deepEqual(tableRows(api.document, "orders-body"), [["Sell", "100", "2 EUROT", "2 EUROT", "Cancel"]]);
   assert.equal(api.$("orders-note").textContent, "Shows your orders on this market in the loaded book.");
 });
 
@@ -780,19 +856,19 @@ test("balances come from the token contracts and allowance names the exchange as
   assert.equal(argWord(allowance.params[0].data, 0), "0x" + addrWord(ACCOUNT));
   assert.equal(argWord(allowance.params[0].data, 1), "0x" + addrWord(TESTNET.exchangeAddress));
   assert.deepEqual(tableRows(api.document, "balance-body"), [
-    ["ZZB", "5", "2", "5", "0"],
-    ["ZZQ", "1000", "0", "1000", "1000"],
+    ["EUROT", "5", "2", "5", "0"],
+    ["USDC", "1000", "0", "1000", "1000"],
   ]);
   assert.equal(api.$("eth-balance").textContent, "ETH 2");
-  assert.equal(api.$("weth-balance").textContent, "WETH 4");
-  assert.equal(api.$("weth-contract").textContent, "WETH " + TESTNET.wethAddress);
+  assert.equal(api.$("weth-balance"), null);
+  assert.equal(api.$("weth-contract"), null);
 });
 
 test("a buy is placeOrder on the pinned exchange and the receipt is linked", async () => {
   const api = await loadPage();
   api.setInput("price-input", "100");
   api.setInput("amount-input", "2");
-  assert.equal(api.$("total-output").textContent, "Total 200 ZZQ");
+  assert.equal(api.$("total-output").textContent, "Total 200 USDC");
   assert.equal(api.$("place-button").disabled, false);
   api.click("place-button");
   await settle();
@@ -817,7 +893,7 @@ test("a sell approves the base token for the exchange for the exact order amount
   api.setInput("amount-input", "2");
   assert.equal(api.$("place-button").disabled, true);
   assert.equal(api.$("approve-button").disabled, false);
-  assert.equal(api.$("approve-button").textContent, "Approve ZZB");
+  assert.equal(api.$("approve-button").textContent, "Approve EUROT");
   api.click("approve-button");
   await settle();
   const tx = sends(api);
@@ -825,7 +901,7 @@ test("a sell approves the base token for the exchange for the exact order amount
   assert.equal(tx[0].params[0].to.toLowerCase(), BASE);
   assert.equal(tx[0].params[0].value, "0x0");
   assert.equal(tx[0].params[0].data, calldata(SEL.approve, [TESTNET.exchangeAddress, ASK_QTY]));
-  assert.equal(api.$("allowance-label").textContent, "Allowance 2 ZZB");
+  assert.equal(api.$("allowance-label").textContent, "Allowance 2 EUROT");
 });
 
 test("a buy approves the quote token, and reset allowance sends zero", async () => {
@@ -838,7 +914,7 @@ test("a buy approves the quote token, and reset allowance sends zero", async () 
   await settle();
   assert.equal(sends(api)[0].params[0].to.toLowerCase(), QUOTE);
   assert.equal(sends(api)[0].params[0].data, calldata(SEL.approve, [TESTNET.exchangeAddress, 2000n * 10n ** 6n]));
-  assert.equal(api.$("allowance-label").textContent, "Allowance 2000 ZZQ");
+  assert.equal(api.$("allowance-label").textContent, "Allowance 2000 USDC");
   assert.equal(api.$("place-button").disabled, false);
 
   api.world.allowance.set(QUOTE, 1000n * 10n ** 6n);
@@ -862,20 +938,29 @@ test("cancel sends cancelOrder for the resting order id to the exchange", async 
   assert.equal(tx[0].params[0].data, calldata(SEL.cancelOrder, [TESTNET.marketId, 1n, 7n]));
 });
 
-test("wrap sends deposit value to WETH and unwrap sends withdraw", async () => {
-  const api = await loadPage();
-  api.setInput("wrap-amount", "1.5");
-  api.click("wrap-button");
+test("selling native ETH sends the base amount as msg.value and skips approve", async () => {
+  const api = await loadPage({
+    kind: "current",
+    nativeMarket: true,
+    extraMarkets: [TESTNET.ethUsdcMarketId],
+  });
+  const ethMarket = api.state.markets.find((market) => market.id === TESTNET.ethUsdcMarketId);
+  assert.ok(ethMarket);
+  assert.equal(ethMarket.base.native, true);
+  assert.equal(ethMarket.label, "ETH/USDC");
+  assert.equal(api.state.marketId, TESTNET.ethUsdcMarketId);
+  api.click("side-sell");
+  api.setInput("price-input", "100");
+  api.setInput("amount-input", "1");
+  assert.equal(api.$("approve-button").textContent, "Native ETH");
+  assert.equal(api.$("approve-button").disabled, true);
+  assert.equal(api.$("place-button").disabled, false);
+  api.click("place-button");
   await settle();
-  assert.equal(sends(api)[0].params[0].to, TESTNET.wethAddress);
-  assert.equal(sends(api)[0].params[0].data, "0x" + SEL.deposit);
-  assert.equal(sends(api)[0].params[0].value, "0x" + (15n * 10n ** 17n).toString(16));
-
-  api.click("unwrap-button");
-  await settle();
-  assert.equal(sends(api)[1].params[0].to, TESTNET.wethAddress);
-  assert.equal(sends(api)[1].params[0].data, calldata(SEL.withdraw, [15n * 10n ** 17n]));
-  assert.equal(sends(api)[1].params[0].value, "0x0");
+  const tx = sends(api).at(-1);
+  assert.equal(tx.params[0].to.toLowerCase(), TESTNET.exchangeAddress.toLowerCase());
+  assert.equal(tx.params[0].value, "0x" + (10n ** 18n).toString(16));
+  assert.equal(tx.params[0].data, calldata(SEL.placeOrder, [TESTNET.ethUsdcMarketId, 1n, 10n ** 18n, ASK_PRICE]));
 });
 
 test("a reverted simulation is shown and nothing is sent", async () => {
@@ -901,7 +986,7 @@ test("only the published market is listed, even if another market exists on the 
   assert.equal(api.state.mode, "live");
   assert.equal(api.state.markets.length, 1);
   assert.equal(api.state.markets[0].id, TESTNET.marketId);
-  assert.equal(api.$("market-list").textContent, "ZZB/ZZQ");
+  assert.equal(api.$("market-list").textContent, "EUROT/USDC");
   assert.equal(callsWithSelector(api, SEL.getMarketDetails).some((call) => argWord(call.params[0].data, 0) === EXTRA_MARKET), false);
   assert.equal(callsWithSelector(api, SEL.createMarketFee).length, 0);
   assert.equal(callsWithSelector(api, SEL.getMarketIdFee).length, 0);
@@ -920,9 +1005,9 @@ test("fills show the OrderFill order, maker, taker, size, price, and total for t
     "42",
     "0x1111…1111",
     "0x2222…2222",
-    "1 ZZB",
+    "1 EUROT",
     "100",
-    "100 ZZQ",
+    "100 USDC",
     "Tx",
   ]]);
   const maker = api.$("fills-body").children[0].children[1];
@@ -934,10 +1019,11 @@ test("fills show the OrderFill order, maker, taker, size, price, and total for t
   assert.equal(fillLogs[0].params[0].address.toLowerCase(), TESTNET.exchangeAddress.toLowerCase());
 });
 
-test("clicking a book level fills the price, and max uses the wallet balance", async () => {
+test("clicking a book level fills the price and size, and max uses the wallet balance", async () => {
   const api = await loadPage();
   api.clickNode(api.$("asks").querySelectorAll(".level")[0]);
   assert.equal(api.$("price-input").value, "100");
+  assert.equal(api.$("amount-input").value, "2");
   api.click("max-amount");
   assert.equal(api.$("amount-input").value, "10");
   api.click("side-sell");
@@ -1027,17 +1113,18 @@ test("a network with no recognized market says none is published", async () => {
   assert.equal(api.$("asks").textContent, "No market is published for this network.");
 });
 
-test("the current order book splits the taker fee and places an order with no referrer", async () => {
+test("the current order book splits the taker fee and places an order without a hint", async () => {
   const api = await loadPage({ kind: "current" });
   assert.equal(api.state.mode, "live", api.state.blockReason || api.state.banner);
   assert.equal(api.state.interfaceKind, "current");
   assert.equal(api.state.protocolFeePercent, 50n);
   assert.equal(api.state.protocolFeeReceiver, TESTNET.protocolFeeReceiver.toLowerCase());
-  assert.equal(api.$("referrer-row").hidden, false);
+  assert.equal(api.$("referrer-row"), null);
   assert.equal(api.$("hint-row").hidden, false);
+  assert.equal(api.$("hint-soft-row").hidden, false);
   assert.equal(api.$("parked-row").hidden, true);
   assert.equal(api.$("fee-label").textContent, "Maker fee 0%. Taker fee 0.3%.");
-  assert.equal(api.$("banner").textContent, "Robinhood Chain Testnet · public RPC · exchange 0x2374…3cfe.");
+  assert.equal(api.$("banner").textContent, "Robinhood Chain Testnet · public RPC · exchange 0x3d9b…d9bd.");
   assert.doesNotMatch(api.$("banner").textContent, /referr/i);
   assert.equal(api.$("orders-note").textContent, "Shows your orders on this market in the loaded book. A resting order that falls below the minimum is refunded.");
   assert.equal(callsWithSelector(api, SEL.getOrderBookWithStartId).length, 0);
@@ -1048,23 +1135,21 @@ test("the current order book splits the taker fee and places an order with no re
   assert.equal(sends(api)[0].params[0].data, calldata(SEL.placeOrder, [TESTNET.marketId, 0n, ASK_QTY, ASK_PRICE]));
 });
 
-test("WETH/USDC shows the market taker fee as a percent", async () => {
-  const api = await loadPage({ kind: "current", baseSymbol: "WETH", quoteSymbol: "USDC" });
-  assert.equal(api.$("market-list").textContent, "WETH/USDC");
+test("ETH/USDC shows the market taker fee as a percent", async () => {
+  const api = await loadPage({
+    kind: "current",
+    nativeMarket: true,
+    extraMarkets: [TESTNET.ethUsdcMarketId],
+  });
+  assert.match(api.$("market-list").textContent, /ETH\/USDC/);
   assert.equal(api.$("fee-label").textContent, "Maker fee 0%. Taker fee 0.3%.");
   assert.doesNotMatch(api.$("banner").textContent, /referr/i);
 });
 
-test("a referrer and a book hint select the matching placeOrder overload", async () => {
+test("a book hint uses placeOrderWithHint and soft mode flips revertOnBadHint", async () => {
   const api = await loadPage({ kind: "current" });
   api.setInput("price-input", "100");
   api.setInput("amount-input", "2");
-  api.setInput("referrer-input", "not an address");
-  assert.equal(api.$("place-button").disabled, true);
-  assert.equal(api.$("form-message").textContent, "Enter a referrer address, or leave it blank.");
-  api.setInput("referrer-input", TESTNET.exchangeAddress);
-  assert.equal(api.$("form-message").textContent, "The exchange contract cannot be the referrer.");
-  api.setInput("referrer-input", FEE);
   api.setInput("hint-input", "7");
   assert.equal(api.$("place-button").disabled, false);
   api.click("place-button");
@@ -1072,28 +1157,26 @@ test("a referrer and a book hint select the matching placeOrder overload", async
   assert.equal(sends(api)[0].params[0].to.toLowerCase(), TESTNET.exchangeAddress.toLowerCase());
   assert.equal(
     sends(api)[0].params[0].data,
-    calldata(SEL.placeOrderWithHintReferrer, [TESTNET.marketId, 0n, ASK_QTY, ASK_PRICE, 7n, FEE]),
+    calldata(SEL.placeOrderWithHint, [TESTNET.marketId, 0n, ASK_QTY, ASK_PRICE, 7n, 1n]),
+  );
+
+  api.setInput("hint-input", "7");
+  api.$("hint-soft-check").checked = true;
+  for (const fn of api.$("hint-soft-check").listeners.change || []) fn({ target: api.$("hint-soft-check") });
+  api.click("place-button");
+  await settle();
+  assert.equal(
+    sends(api).at(-1).params[0].data,
+    calldata(SEL.placeOrderWithHint, [TESTNET.marketId, 0n, ASK_QTY, ASK_PRICE, 7n, 0n]),
   );
 });
 
-test("a referrer without a hint uses placeOrder with the referrer address", async () => {
+test("clicking a book level on the current interface also fills the soft-hint order id", async () => {
   const api = await loadPage({ kind: "current" });
-  api.setInput("price-input", "100");
-  api.setInput("amount-input", "2");
-  api.setInput("referrer-input", FEE);
-  api.click("place-button");
-  await settle();
-  assert.equal(sends(api)[0].params[0].data, calldata(SEL.placeOrderReferrer, [TESTNET.marketId, 0n, ASK_QTY, ASK_PRICE, FEE]));
-});
-
-test("a book hint without a referrer uses placeOrderWithHint", async () => {
-  const api = await loadPage({ kind: "current" });
-  api.setInput("price-input", "100");
-  api.setInput("amount-input", "2");
-  api.setInput("hint-input", "7");
-  api.click("place-button");
-  await settle();
-  assert.equal(sends(api)[0].params[0].data, calldata(SEL.placeOrderWithHint, [TESTNET.marketId, 0n, ASK_QTY, ASK_PRICE, 7n]));
+  api.clickNode(api.$("asks").querySelectorAll(".level")[0]);
+  assert.equal(api.$("price-input").value, "100");
+  assert.equal(api.$("amount-input").value, "2");
+  assert.equal(api.$("hint-input").value, "7");
 });
 
 test("a deep book continues with getOrderBookWithStartId", async () => {
@@ -1112,7 +1195,7 @@ test("a deep book continues with getOrderBookWithStartId", async () => {
 test("parked balances withdraw through the market bank", async () => {
   const api = await loadPage({ kind: "current", parked: [[BASE, 10n ** 18n], [QUOTE, 5n * 10n ** 6n]] });
   assert.equal(api.$("parked-row").hidden, false);
-  assert.equal(api.$("parked-label").textContent, "Parked 1 ZZB · 5 ZZQ");
+  assert.equal(api.$("parked-label").textContent, "Parked 1 EUROT · 5 USDC");
   const reads = callsWithSelector(api, SEL.failedPaymentBalance);
   const accountRead = reads.find((call) => argWord(call.params[0].data, 0) === "0x" + addrWord(ACCOUNT));
   assert.ok(accountRead, "failedPaymentBalance was not read for the wallet");
