@@ -25,7 +25,7 @@ const TESTNET = {
   explorerUrl: "https://explorer.testnet.chain.robinhood.com",
   exchangeAddress: "0x3d9B1887B10ee3d94fbDEA1592Fe80a460A6d9bD",
   marketId: "0x2202c65c0448414d0774a494108c658631f4495729c172792d38b5cfd22e166e",
-  ethUsdcMarketId: "0xa223cc2d5cbbb1daad80d48e3baa172f400d0f2f16ce44708f6b968b09e5dbbc",
+  ethUsdcMarketId: "0x29a51d483798551e89bc14aa76c2282fec539a4d3593c46a54d27aa59ef51095",
   protocolFeeReceiver: "0x646BDE77b001AE117D596a0DE3A35Dc18370B2aC",
 };
 const NATIVE = "0x0000000000000000000000000000000000000000";
@@ -447,7 +447,7 @@ async function loadPage(options = {}) {
     revertPlace: Boolean(options.revertPlace),
     marketLogs: options.marketLogs || [],
     receiptLogs: options.receiptLogs || [],
-    validMarkets: new Set(options.noPublishedMarket ? [] : [TESTNET.marketId, ...(options.extraMarkets || [])].map((id) => id.toLowerCase())),
+    validMarkets: new Set(options.noPublishedMarket ? [] : [TESTNET.ethUsdcMarketId, ...(options.extraMarkets || [])].map((id) => id.toLowerCase())),
     fills: options.fills === undefined ? defaultFills() : options.fills,
     balance: new Map([
       [BASE, 5n * 10n ** 18n],
@@ -656,7 +656,7 @@ function defaultFills() {
   return [
     {
       topics: [TOPIC.TOPIC_ORDER_FILL, orderTopic, accountTopic, otherTopic],
-      data: "0x" + bytes32Word(TESTNET.marketId) + word(10n ** 18n) + word(ASK_PRICE),
+      data: "0x" + bytes32Word(TESTNET.ethUsdcMarketId) + word(10n ** 18n) + word(ASK_PRICE),
       transactionHash: FILL_HASH,
       logIndex: "0x1",
       blockNumber: "0x20",
@@ -783,9 +783,25 @@ test("Robinhood testnet is pinned and chains without a deployment have no exchan
   assert.equal(testnet.explorerUrl, TESTNET.explorerUrl);
   assert.equal(testnet.exchangeAddress, TESTNET.exchangeAddress);
   assert.equal(testnet.wethAddress, undefined);
-  assert.deepEqual([...testnet.marketIds], [TESTNET.ethUsdcMarketId, TESTNET.marketId]);
-  for (const chain of api.page.CHAINS.filter((item) => item.key !== "robinhood-testnet")) {
+  assert.deepEqual([...testnet.marketIds], [TESTNET.ethUsdcMarketId]);
+  const sepolia = api.page.CHAINS.find((chain) => chain.key === "ethereum-sepolia");
+  assert.equal(sepolia.chainId, "0xaa36a7");
+  assert.deepEqual([...sepolia.marketIds], [
+    "0xf95153cbc4fb6083d98844b3d7feffa94f668633715f4f51a6324e054ad68fd2",
+  ]);
+  const baseSepolia = api.page.CHAINS.find((chain) => chain.key === "base-sepolia");
+  assert.equal(baseSepolia.chainId, "0x14a34");
+  assert.equal(baseSepolia.exchangeAddress, "0xEEfC0997B53F2FD2d7a4FB1399f2eb12D542Fe87");
+  assert.deepEqual([...baseSepolia.marketIds], [
+    "0x341612d9daa51cfe982c31d5eef5805778e0461d260ad7f9d3aeea7a5247ee3c",
+    "0x36a99031290d07e1e9f4e3e0b38d3faddbe3e9c25949e93049af715d8ecc3477",
+  ]);
+  const base = api.page.CHAINS.find((chain) => chain.key === "base");
+  assert.equal(base.chainId, "0x2105");
+  for (const key of ["robinhood", "ethereum", "base"]) {
+    const chain = api.page.CHAINS.find((item) => item.key === key);
     assert.equal(chain.exchangeAddress, "", chain.chainName + " should not ship an exchange address");
+    assert.equal(chain.marketIds, undefined);
   }
 });
 
@@ -816,7 +832,7 @@ test("boot reads the pinned exchange through the testnet RPC", async () => {
 
 test("market details from getMarketDetails are what the form shows", async () => {
   const api = await loadPage();
-  const detail = callsWithSelector(api, SEL.getMarketDetails).find((call) => argWord(call.params[0].data, 0) === TESTNET.marketId);
+  const detail = callsWithSelector(api, SEL.getMarketDetails).find((call) => argWord(call.params[0].data, 0) === TESTNET.ethUsdcMarketId);
   assert.ok(detail, "getMarketDetails was not called for the pinned market");
   assert.equal(detail.params[0].to.toLowerCase(), TESTNET.exchangeAddress.toLowerCase());
   assert.equal(api.$("market-list").textContent, "EUROT/USDC");
@@ -836,8 +852,8 @@ test("the order book is read from the exchange and the prices are the contract v
     const book = callsWithSelector(api, SEL.getOrderBook).find((call) => BigInt(argWord(call.params[0].data, 1)) === side);
     assert.equal(head.params[0].to.toLowerCase(), TESTNET.exchangeAddress.toLowerCase());
     assert.equal(book.params[0].to.toLowerCase(), TESTNET.exchangeAddress.toLowerCase());
-    assert.equal(argWord(head.params[0].data, 0), TESTNET.marketId);
-    assert.equal(argWord(book.params[0].data, 0), TESTNET.marketId);
+    assert.equal(argWord(head.params[0].data, 0), TESTNET.ethUsdcMarketId);
+    assert.equal(argWord(book.params[0].data, 0), TESTNET.ethUsdcMarketId);
     assert.equal(BigInt(argWord(book.params[0].data, 2)), 25n);
   }
   assert.deepEqual(bookLevels(api.document, "asks"), [["100", "2", "200"]]);
@@ -877,7 +893,7 @@ test("a buy is placeOrder on the pinned exchange and the receipt is linked", asy
   assert.equal(tx[0].params[0].from, ACCOUNT);
   assert.equal(tx[0].params[0].to.toLowerCase(), TESTNET.exchangeAddress.toLowerCase());
   assert.equal(tx[0].params[0].value, "0x0");
-  assert.equal(tx[0].params[0].data, calldata(SEL.placeOrder, [TESTNET.marketId, 0n, ASK_QTY, ASK_PRICE]));
+  assert.equal(tx[0].params[0].data, calldata(SEL.placeOrder, [TESTNET.ethUsdcMarketId, 0n, ASK_QTY, ASK_PRICE]));
   const simulated = callsWithSelector(api, SEL.placeOrder).filter((call) => call.params[0].from);
   assert.equal(simulated.length > 0, true);
   assert.equal(simulated.at(-1).params[0].data, tx[0].params[0].data);
@@ -935,7 +951,7 @@ test("cancel sends cancelOrder for the resting order id to the exchange", async 
   const tx = sends(api);
   assert.equal(tx.length, 1);
   assert.equal(tx[0].params[0].to.toLowerCase(), TESTNET.exchangeAddress.toLowerCase());
-  assert.equal(tx[0].params[0].data, calldata(SEL.cancelOrder, [TESTNET.marketId, 1n, 7n]));
+  assert.equal(tx[0].params[0].data, calldata(SEL.cancelOrder, [TESTNET.ethUsdcMarketId, 1n, 7n]));
 });
 
 test("selling native ETH sends the base amount as msg.value and skips approve", async () => {
@@ -985,7 +1001,7 @@ test("only the published market is listed, even if another market exists on the 
   });
   assert.equal(api.state.mode, "live");
   assert.equal(api.state.markets.length, 1);
-  assert.equal(api.state.markets[0].id, TESTNET.marketId);
+  assert.equal(api.state.markets[0].id, TESTNET.ethUsdcMarketId);
   assert.equal(api.$("market-list").textContent, "EUROT/USDC");
   assert.equal(callsWithSelector(api, SEL.getMarketDetails).some((call) => argWord(call.params[0].data, 0) === EXTRA_MARKET), false);
   assert.equal(callsWithSelector(api, SEL.createMarketFee).length, 0);
@@ -1045,7 +1061,7 @@ test("an order below the minimum is not sent until the normal order is confirmed
   assert.equal(api.$("place-button").disabled, false);
   api.click("place-button");
   await settle();
-  assert.equal(sends(api)[0].params[0].data, calldata(SEL.placeOrder, [TESTNET.marketId, 0n, 10n ** 17n, ASK_PRICE]));
+  assert.equal(sends(api)[0].params[0].data, calldata(SEL.placeOrder, [TESTNET.ethUsdcMarketId, 0n, 10n ** 17n, ASK_PRICE]));
 });
 
 test("the book still loads with no wallet, and no transaction is sent", async () => {
@@ -1132,7 +1148,7 @@ test("the current order book splits the taker fee and places an order without a 
   api.setInput("amount-input", "2");
   api.click("place-button");
   await settle();
-  assert.equal(sends(api)[0].params[0].data, calldata(SEL.placeOrder, [TESTNET.marketId, 0n, ASK_QTY, ASK_PRICE]));
+  assert.equal(sends(api)[0].params[0].data, calldata(SEL.placeOrder, [TESTNET.ethUsdcMarketId, 0n, ASK_QTY, ASK_PRICE]));
 });
 
 test("ETH/USDC shows the market taker fee as a percent", async () => {
@@ -1157,7 +1173,7 @@ test("a book hint uses placeOrderWithHint and soft mode flips revertOnBadHint", 
   assert.equal(sends(api)[0].params[0].to.toLowerCase(), TESTNET.exchangeAddress.toLowerCase());
   assert.equal(
     sends(api)[0].params[0].data,
-    calldata(SEL.placeOrderWithHint, [TESTNET.marketId, 0n, ASK_QTY, ASK_PRICE, 7n, 1n]),
+    calldata(SEL.placeOrderWithHint, [TESTNET.ethUsdcMarketId, 0n, ASK_QTY, ASK_PRICE, 7n, 1n]),
   );
 
   api.setInput("hint-input", "7");
@@ -1167,7 +1183,7 @@ test("a book hint uses placeOrderWithHint and soft mode flips revertOnBadHint", 
   await settle();
   assert.equal(
     sends(api).at(-1).params[0].data,
-    calldata(SEL.placeOrderWithHint, [TESTNET.marketId, 0n, ASK_QTY, ASK_PRICE, 7n, 0n]),
+    calldata(SEL.placeOrderWithHint, [TESTNET.ethUsdcMarketId, 0n, ASK_QTY, ASK_PRICE, 7n, 0n]),
   );
 });
 
@@ -1183,7 +1199,7 @@ test("a deep book continues with getOrderBookWithStartId", async () => {
   const api = await loadPage({ kind: "current", deepBook: true });
   const pages = callsWithSelector(api, SEL.getOrderBookWithStartId);
   assert.equal(pages.length, 1);
-  assert.equal(argWord(pages[0].params[0].data, 0), TESTNET.marketId);
+  assert.equal(argWord(pages[0].params[0].data, 0), TESTNET.ethUsdcMarketId);
   assert.equal(BigInt(argWord(pages[0].params[0].data, 1)), 1n);
   assert.equal(BigInt(argWord(pages[0].params[0].data, 2)), 25n);
   assert.equal(BigInt(argWord(pages[0].params[0].data, 3)), 8n);

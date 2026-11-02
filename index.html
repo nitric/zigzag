@@ -458,8 +458,22 @@ const CHAINS = [
     protocolFeePercent: 50,
     protocolFeeReceiver: "0x646BDE77b001AE117D596a0DE3A35Dc18370B2aC",
     marketIds: [
-      "0xa223cc2d5cbbb1daad80d48e3baa172f400d0f2f16ce44708f6b968b09e5dbbc",
-      "0x2202c65c0448414d0774a494108c658631f4495729c172792d38b5cfd22e166e",
+      "0x29a51d483798551e89bc14aa76c2282fec539a4d3593c46a54d27aa59ef51095",
+      "0x4b94167d0253f6b7bc521146670ba253313b1e19f611c582420645e1def42c24",
+    ],
+  },
+  {
+    key: "ethereum-sepolia",
+    chainId: "0xaa36a7",
+    chainName: "Ethereum Sepolia",
+    rpcUrl: "https://ethereum-sepolia-rpc.publicnode.com",
+    explorerUrl: "https://sepolia.etherscan.io",
+    exchangeAddress: "0xEEfC0997B53F2FD2d7a4FB1399f2eb12D542Fe87",
+    protocolFeePercent: 50,
+    protocolFeeReceiver: "0x646BDE77b001AE117D596a0DE3A35Dc18370B2aC",
+    marketIds: [
+      "0xf95153cbc4fb6083d98844b3d7feffa94f668633715f4f51a6324e054ad68fd2",
+      "0x20c4fbfaed887d889a290d9fe7d3e16ee17ce82f68854b65c4c3a4bf4c9f243c",
     ],
   },
   {
@@ -476,6 +490,28 @@ const CHAINS = [
     chainName: "Ethereum",
     rpcUrl: "https://ethereum.publicnode.com",
     explorerUrl: "https://etherscan.io",
+    exchangeAddress: "",
+  },
+  {
+    key: "base-sepolia",
+    chainId: "0x14a34",
+    chainName: "Base Sepolia",
+    rpcUrl: "https://base-sepolia-rpc.publicnode.com",
+    explorerUrl: "https://sepolia.basescan.org",
+    exchangeAddress: "0xEEfC0997B53F2FD2d7a4FB1399f2eb12D542Fe87",
+    protocolFeePercent: 50,
+    protocolFeeReceiver: "0x646BDE77b001AE117D596a0DE3A35Dc18370B2aC",
+    marketIds: [
+      "0x341612d9daa51cfe982c31d5eef5805778e0461d260ad7f9d3aeea7a5247ee3c",
+      "0x36a99031290d07e1e9f4e3e0b38d3faddbe3e9c25949e93049af715d8ecc3477",
+    ],
+  },
+  {
+    key: "base",
+    chainId: "0x2105",
+    chainName: "Base",
+    rpcUrl: "https://base-rpc.publicnode.com",
+    explorerUrl: "https://basescan.org",
     exchangeAddress: "",
   },
 ];
@@ -1301,7 +1337,7 @@ async function loadLiveMarket() {
 }
 
 function demoMarkets() {
-  const base = { address: "0x00000000000000000000000000000000000000b1", symbol: "EUROT", name: "Euro Token", decimals: 18 };
+  const base = { address: "0x00000000000000000000000000000000000000b1", symbol: "EURC", name: "Euro Coin", decimals: 18 };
   const quote = { address: "0x00000000000000000000000000000000000000c1", symbol: "USDC", name: "USD Coin", decimals: 6 };
   const sampleUser = "0x00000000000000000000000000000000000000d1";
   const price = (human) => parseUnits(human, quote.decimals);
@@ -1332,8 +1368,8 @@ function demoMarkets() {
   }));
   return [{
     id: "0x" + "11".repeat(32),
-    label: "EUROT/USDC demo",
-    title: "Euro Token / USD Coin",
+    label: "EURC/USDC demo",
+    title: "Euro Coin / USD Coin",
     base,
     quote,
     baseMin: size("0.01"),
@@ -1347,8 +1383,8 @@ function demoMarkets() {
     bids,
   }, {
     id: "0x" + "22".repeat(32),
-    label: "EUROT/ETH demo",
-    title: "Euro Token / Ether",
+    label: "EURC/ETH demo",
+    title: "Euro Coin / Ether",
     base,
     quote: { address: "0x00000000000000000000000000000000000000c2", symbol: "ETH", name: "Ether", decimals: 18 },
     baseMin: size("0.1"),
