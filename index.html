@@ -378,13 +378,12 @@
                 <th>Token</th>
                 <th>Wallet</th>
                 <th>Reserved</th>
-                <th>Available</th>
                 <th>Allowance</th>
               </tr>
             </thead>
             <tbody id="balance-body"></tbody>
           </table>
-          <div class="empty" id="balance-note">Available is the wallet balance a new order can draw on. Reserved tokens are already escrowed in the market bank.</div>
+          <div class="empty" id="balance-note">Wallet is the balance a new order can draw on. Reserved tokens are already escrowed in the market bank.</div>
         </div>
       </section>
       <section class="panel orders-panel" aria-label="Active orders">
@@ -402,7 +401,6 @@
             </thead>
             <tbody id="orders-body"></tbody>
           </table>
-          <div class="empty" id="orders-note">Shows your orders on this market in the loaded book.</div>
         </div>
       </section>
       <section class="panel fills-panel" aria-label="Fills">
@@ -422,7 +420,6 @@
             </thead>
             <tbody id="fills-body"></tbody>
           </table>
-          <div class="empty" id="fills-note"></div>
         </div>
       </section>
     </div>
@@ -1615,13 +1612,12 @@ function renderBook() {
   }
 }
 
-function balanceRow(symbol, wallet, reserved, available, allowance, decimals, native) {
+function balanceRow(symbol, wallet, reserved, allowance, decimals, native) {
   const row = el("tr");
   row.append(
     el("td", null, symbol),
     el("td", "num", formatAmount(wallet, decimals)),
     el("td", "num", formatAmount(reserved, decimals)),
-    el("td", "num", formatAmount(available, decimals)),
     el("td", "num", !state.account ? "—" : native ? "n/a" : formatAmount(allowance, decimals)),
   );
   return row;
@@ -1636,13 +1632,13 @@ function renderBalances() {
     return;
   }
   if (!state.account) {
-    spanRow(body, 5, "Connect a wallet on " + chain().chainName + " to read balances.");
+    spanRow(body, 4, "Connect a wallet on " + chain().chainName + " to read balances.");
     return;
   }
   const reserved = reservedAmounts(market);
   body.append(
-    balanceRow(market.base.symbol, state.baseWallet, reserved.base, state.baseWallet, state.baseAllowance, market.base.decimals, market.base.native),
-    balanceRow(market.quote.symbol, state.quoteWallet, reserved.quote, state.quoteWallet, state.quoteAllowance, market.quote.decimals, market.quote.native),
+    balanceRow(market.base.symbol, state.baseWallet, reserved.base, state.baseAllowance, market.base.decimals, market.base.native),
+    balanceRow(market.quote.symbol, state.quoteWallet, reserved.quote, state.quoteAllowance, market.quote.decimals, market.quote.native),
   );
   $("eth-balance").textContent = "ETH " + formatAmount(state.ethBalance, 18);
 }
@@ -1650,9 +1646,6 @@ function renderBalances() {
 function renderOrders() {
   const body = $("orders-body");
   const market = selectedMarket();
-  $("orders-note").textContent = state.interfaceKind === "current"
-    ? "Shows your orders on this market in the loaded book. A resting order that falls below the minimum is refunded."
-    : "Shows your orders on this market in the loaded book.";
   body.replaceChildren();
   const orders = userOrders();
   if (!market) {
@@ -1691,36 +1684,23 @@ function renderOrders() {
 
 function renderFills() {
   const body = $("fills-body");
-  const note = $("fills-note");
   const market = selectedMarket();
   body.replaceChildren();
-  const lookback = APP.logChunkBlocks * APP.fillChunks;
   if (state.mode !== "live") {
-    note.textContent = "Fills appear when a live exchange is connected.";
     spanRow(body, 7, "No live exchange.");
     return;
   }
   if (!state.account) {
-    note.textContent = "";
     spanRow(body, 7, "Connect a wallet to see your fills.");
     return;
   }
   if (!sameChain(state.walletChainId)) {
-    note.textContent = "";
     spanRow(body, 7, "Switch the wallet to " + chain().chainName + " to see fills.");
     return;
   }
   const fills = market
     ? state.fills.filter((fill) => fill.marketId === market.id.toLowerCase())
     : [];
-  const parts = [];
-  if (market) {
-    const id = market.id.toLowerCase();
-    parts.push("Market " + id.slice(0, 6) + "…" + id.slice(-4) + ". Maker is the resting order. Price is that order’s limit, in " + market.quote.symbol + " per 1 " + market.base.symbol + ".");
-  }
-  parts.push("Scanned about the last " + lookback + " blocks.");
-  if (state.fillNote) parts.push(state.fillNote);
-  note.textContent = parts.join(" ");
   if (!market) {
     spanRow(body, 7, "No market selected.");
     return;

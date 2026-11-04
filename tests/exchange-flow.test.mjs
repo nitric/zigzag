@@ -783,11 +783,15 @@ test("Robinhood testnet is pinned and chains without a deployment have no exchan
   assert.equal(testnet.explorerUrl, TESTNET.explorerUrl);
   assert.equal(testnet.exchangeAddress, TESTNET.exchangeAddress);
   assert.equal(testnet.wethAddress, undefined);
-  assert.deepEqual([...testnet.marketIds], [TESTNET.ethUsdcMarketId]);
+  assert.deepEqual([...testnet.marketIds], [
+    TESTNET.ethUsdcMarketId,
+    "0x4b94167d0253f6b7bc521146670ba253313b1e19f611c582420645e1def42c24",
+  ]);
   const sepolia = api.page.CHAINS.find((chain) => chain.key === "ethereum-sepolia");
   assert.equal(sepolia.chainId, "0xaa36a7");
   assert.deepEqual([...sepolia.marketIds], [
     "0xf95153cbc4fb6083d98844b3d7feffa94f668633715f4f51a6324e054ad68fd2",
+    "0x20c4fbfaed887d889a290d9fe7d3e16ee17ce82f68854b65c4c3a4bf4c9f243c",
   ]);
   const baseSepolia = api.page.CHAINS.find((chain) => chain.key === "base-sepolia");
   assert.equal(baseSepolia.chainId, "0x14a34");
@@ -861,7 +865,6 @@ test("the order book is read from the exchange and the prices are the contract v
   assert.equal(api.$("asks").querySelectorAll(".level")[0].children[0].style.width, "100%");
   assert.equal(api.$("spread").children[1].textContent, "10");
   assert.deepEqual(tableRows(api.document, "orders-body"), [["Sell", "100", "2 EUROT", "2 EUROT", "Cancel"]]);
-  assert.equal(api.$("orders-note").textContent, "Shows your orders on this market in the loaded book.");
 });
 
 test("balances come from the token contracts and allowance names the exchange as spender", async () => {
@@ -872,8 +875,8 @@ test("balances come from the token contracts and allowance names the exchange as
   assert.equal(argWord(allowance.params[0].data, 0), "0x" + addrWord(ACCOUNT));
   assert.equal(argWord(allowance.params[0].data, 1), "0x" + addrWord(TESTNET.exchangeAddress));
   assert.deepEqual(tableRows(api.document, "balance-body"), [
-    ["EUROT", "5", "2", "5", "0"],
-    ["USDC", "1000", "0", "1000", "1000"],
+    ["EUROT", "5", "2", "0"],
+    ["USDC", "1000", "0", "1000"],
   ]);
   assert.equal(api.$("eth-balance").textContent, "ETH 2");
   assert.equal(api.$("weth-balance"), null);
@@ -1029,7 +1032,6 @@ test("fills show the OrderFill order, maker, taker, size, price, and total for t
   const maker = api.$("fills-body").children[0].children[1];
   assert.equal(maker.className, "you");
   assert.equal(api.$("fills-body").querySelectorAll("a")[0].href, TESTNET.explorerUrl + "/tx/" + FILL_HASH);
-  assert.match(api.$("fills-note").textContent, /8000 blocks/);
   const fillLogs = rpcCalls(api, "eth_getLogs").filter((call) => String(call.params[0].topics[0]).toLowerCase() === TOPIC.TOPIC_ORDER_FILL);
   assert.equal(fillLogs.length > 0, true);
   assert.equal(fillLogs[0].params[0].address.toLowerCase(), TESTNET.exchangeAddress.toLowerCase());
@@ -1142,7 +1144,6 @@ test("the current order book splits the taker fee and places an order without a 
   assert.equal(api.$("fee-label").textContent, "Maker fee 0%. Taker fee 0.3%.");
   assert.equal(api.$("banner").textContent, "Robinhood Chain Testnet · public RPC · exchange 0x3d9b…d9bd.");
   assert.doesNotMatch(api.$("banner").textContent, /referr/i);
-  assert.equal(api.$("orders-note").textContent, "Shows your orders on this market in the loaded book. A resting order that falls below the minimum is refunded.");
   assert.equal(callsWithSelector(api, SEL.getOrderBookWithStartId).length, 0);
   api.setInput("price-input", "100");
   api.setInput("amount-input", "2");
