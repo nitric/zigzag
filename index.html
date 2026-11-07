@@ -127,6 +127,9 @@
   .side-column > .panel > .body { flex: 1 1 auto; min-height: 0; overflow: auto; }
   .side-column thead th { position: sticky; top: 0; background: var(--panel); z-index: 1; }
   .balances-panel { flex: 0 0 auto; }
+  .balances-panel td.num { text-align: right; }
+  .orders-panel td.num { text-align: right; }
+  .fills-panel td.num:not(:first-child) { text-align: right; }
   .orders-panel { flex: 0 1 auto; }
   .fills-panel { flex: 1 1 auto; min-height: 140px; }
   @media (max-width: 1200px) {
