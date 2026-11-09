@@ -1235,3 +1235,85 @@ test("a plain market shows that no fee is stored", async () => {
   assert.equal(callsWithSelector(api, SEL.createMarketPlain).length, 0);
   assert.equal(sends(api).length, 0);
 });
+
+test("a buy with fractional price and amount sends the exact scaled values", async () => {
+  const api = await loadPage();
+  api.setInput("price-input", "99.75");
+  api.setInput("amount-input", "1.5");
+  assert.equal(api.$("total-output").textContent, "Total 149.625 USDC");
+  assert.equal(api.$("place-button").disabled, false);
+  api.click("place-button");
+  await settle();
+  const tx = sends(api);
+  assert.equal(tx.length, 1);
+  assert.equal(tx[0].params[0].to.toLowerCase(), TESTNET.exchangeAddress.toLowerCase());
+  assert.equal(
+    tx[0].params[0].data,
+    calldata(SEL.placeOrder, [TESTNET.ethUsdcMarketId, 0n, 15n * 10n ** 17n, 99_750_000n]),
+  );
+});
+
+test("price and amount at the token's full precision are sent without rounding", async () => {
+  const api = await loadPage();
+  api.setInput("price-input", "100.123456");
+  api.setInput("amount-input", "1.123456789012345678");
+  assert.equal(api.$("place-button").disabled, false);
+  api.click("place-button");
+  await settle();
+  const tx = sends(api);
+  assert.equal(tx.length, 1);
+  assert.equal(
+    tx[0].params[0].data,
+    calldata(SEL.placeOrder, [TESTNET.ethUsdcMarketId, 0n, 1_123_456_789_012_345_678n, 100_123_456n]),
+  );
+});
+
+test("a price or amount with more decimals than the token supports is not sent", async () => {
+  const api = await loadPage();
+  api.setInput("price-input", "100.1234567");
+  api.setInput("amount-input", "1");
+  assert.equal(api.$("place-button").disabled, true);
+  assert.equal(api.$("form-message").textContent, "Too many decimal places for this token.");
+
+  api.setInput("price-input", "100");
+  api.setInput("amount-input", "1.1234567890123456789");
+  assert.equal(api.$("place-button").disabled, true);
+  assert.equal(api.$("form-message").textContent, "Too many decimal places for this token.");
+
+  api.click("place-button");
+  await settle();
+  assert.equal(sends(api).length, 0);
+});
+
+test("a token sell places the order with the entered price and amount after approval", async () => {
+  const api = await loadPage();
+  api.click("side-sell");
+  api.setInput("price-input", "100.5");
+  api.setInput("amount-input", "2.25");
+  api.click("approve-button");
+  await settle();
+  assert.equal(sends(api)[0].params[0].data, calldata(SEL.approve, [TESTNET.exchangeAddress, 225n * 10n ** 16n]));
+  assert.equal(api.$("place-button").disabled, false);
+  api.click("place-button");
+  await settle();
+  const tx = sends(api).at(-1);
+  assert.equal(sends(api).length, 2);
+  assert.equal(tx.params[0].to.toLowerCase(), TESTNET.exchangeAddress.toLowerCase());
+  assert.equal(tx.params[0].value, "0x0");
+  assert.equal(
+    tx.params[0].data,
+    calldata(SEL.placeOrder, [TESTNET.ethUsdcMarketId, 1n, 225n * 10n ** 16n, 100_500_000n]),
+  );
+});
+
+test("placing an order from a clicked book level sends that level's price and size", async () => {
+  const api = await loadPage();
+  api.clickNode(api.$("asks").querySelectorAll(".level")[0]);
+  assert.equal(api.$("price-input").value, "100");
+  assert.equal(api.$("amount-input").value, "2");
+  api.click("place-button");
+  await settle();
+  const tx = sends(api);
+  assert.equal(tx.length, 1);
+  assert.equal(tx[0].params[0].data, calldata(SEL.placeOrder, [TESTNET.ethUsdcMarketId, 0n, ASK_QTY, ASK_PRICE]));
+});
