@@ -23,9 +23,11 @@ const TESTNET = {
   chainId: "0xb626",
   rpcUrl: "https://rpc.testnet.chain.robinhood.com",
   explorerUrl: "https://explorer.testnet.chain.robinhood.com",
-  exchangeAddress: "0x3d9B1887B10ee3d94fbDEA1592Fe80a460A6d9bD",
+  exchangeAddress: "0x3502F1172E06FAd80dd56b1aE87cdA8204bbe8eA",
   marketId: "0x2202c65c0448414d0774a494108c658631f4495729c172792d38b5cfd22e166e",
-  ethUsdcMarketId: "0x29a51d483798551e89bc14aa76c2282fec539a4d3593c46a54d27aa59ef51095",
+  ethUsdcMarketId: "0x8fb4e7e01625f7f1517569f43321dada01159bc3fe5f4cf73db7801a6fa2ceb0",
+  eurcUsdcMarketId: "0x9e8f200f74d27a24aeb27a6f2a83e4acd4f98d230ff2bc2a45fbb921fdbed953",
+  ethTslaMarketId: "0xc7bcdfdbc3dec7ceb2d50372ff7e40008eabc54010f83f89500e71f4d289d368",
   protocolFeeReceiver: "0x646BDE77b001AE117D596a0DE3A35Dc18370B2aC",
 };
 const NATIVE = "0x0000000000000000000000000000000000000000";
@@ -407,7 +409,8 @@ function bookLevels(document, id) {
 }
 
 function emptyDetails(kind) {
-  return returns(Array(kind === "plain" ? 5 : 8).fill(word(0)));
+  const words = kind === "plain" ? 5 : kind === "current" ? 10 : 8;
+  return returns(Array(words).fill(word(0)));
 }
 
 function marketDetails(kind, options = {}) {
@@ -417,9 +420,11 @@ function marketDetails(kind, options = {}) {
     return returns([addrWord(base), addrWord(quote), word(BASE_MIN), word(QUOTE_MIN), addrWord(BANK)]);
   }
   if (kind === "current") {
+    // base, quote, basePostMin, quotePostMin, baseOrderMin, quoteOrderMin, feeNum, feeDen, decimals, bank
+    // Order mins are below post mins so the FOK / below-post path stays testable.
     return returns([
       addrWord(base), addrWord(quote), word(BASE_MIN), word(QUOTE_MIN),
-      word(30), word(10000), word(18), addrWord(BANK),
+      word(BASE_MIN / 10n), word(QUOTE_MIN / 10n), word(30), word(10000), word(18), addrWord(BANK),
     ]);
   }
   return returns([
@@ -783,23 +788,27 @@ test("Robinhood testnet is pinned and chains without a deployment have no exchan
   assert.equal(testnet.explorerUrl, TESTNET.explorerUrl);
   assert.equal(testnet.exchangeAddress, TESTNET.exchangeAddress);
   assert.equal(testnet.wethAddress, undefined);
-  assert.deepEqual([...testnet.marketIds], [
-    TESTNET.ethUsdcMarketId,
-    "0x4b94167d0253f6b7bc521146670ba253313b1e19f611c582420645e1def42c24",
-  ]);
+  assert.equal(JSON.stringify(testnet.marketIds), JSON.stringify([
+    { id: TESTNET.ethUsdcMarketId, label: "ETH/USDC" },
+    { id: TESTNET.eurcUsdcMarketId, label: "EURC/USDC" },
+    { id: TESTNET.ethTslaMarketId, label: "ETH/TSLA" },
+  ]));
   const sepolia = api.page.CHAINS.find((chain) => chain.key === "ethereum-sepolia");
   assert.equal(sepolia.chainId, "0xaa36a7");
-  assert.deepEqual([...sepolia.marketIds], [
-    "0xf95153cbc4fb6083d98844b3d7feffa94f668633715f4f51a6324e054ad68fd2",
-    "0x20c4fbfaed887d889a290d9fe7d3e16ee17ce82f68854b65c4c3a4bf4c9f243c",
-  ]);
+  assert.equal(sepolia.exchangeAddress, "0x1f43351622dD159693224B73618F4CB32158B261");
+  assert.equal(JSON.stringify(sepolia.marketIds), JSON.stringify([
+    { id: "0x85c7bb7eec380a80f41bb67969552ccead20b4d4b754f555c525437c00fbcaf8", label: "ETH/USDC" },
+    { id: "0x3d8f0db23cd995028f5a5c024b7d827f48e3e3aa7ec9ca93bfae53dae0867209", label: "EURC/USDC" },
+    { id: "0x7629969c111a1716f9b508067423da65193f67334493925468994e513101e309", label: "ETH/TSLA" },
+  ]));
   const baseSepolia = api.page.CHAINS.find((chain) => chain.key === "base-sepolia");
   assert.equal(baseSepolia.chainId, "0x14a34");
-  assert.equal(baseSepolia.exchangeAddress, "0xEEfC0997B53F2FD2d7a4FB1399f2eb12D542Fe87");
-  assert.deepEqual([...baseSepolia.marketIds], [
-    "0x341612d9daa51cfe982c31d5eef5805778e0461d260ad7f9d3aeea7a5247ee3c",
-    "0x36a99031290d07e1e9f4e3e0b38d3faddbe3e9c25949e93049af715d8ecc3477",
-  ]);
+  assert.equal(baseSepolia.exchangeAddress, "0x4A6C522C88AB8185BAd1Eb79F57d25183F640Ece");
+  assert.equal(JSON.stringify(baseSepolia.marketIds), JSON.stringify([
+    { id: "0x9175664c5877bb06f367ece4d44bf7bcb04f296c5d24c62465714917d99c5b38", label: "ETH/USDC" },
+    { id: "0x9278a943020206c0f9d32e5668d03229c546474c31b3a82c48b22192ad885bcd", label: "EURC/USDC" },
+    { id: "0x6368d1bcddc64285164e05ac6f8e81ae3d9fd0603725ba1bddc191b8f288c57e", label: "ETH/TSLA" },
+  ]));
   const base = api.page.CHAINS.find((chain) => chain.key === "base");
   assert.equal(base.chainId, "0x2105");
   for (const key of ["robinhood", "ethereum", "base"]) {
@@ -846,7 +855,7 @@ test("market details from getMarketDetails are what the form shows", async () =>
   assert.equal(api.$("fee-label").textContent, "Market fee 0.3% to 0xdddd…dddd");
   assert.equal(api.$("spender-label").textContent, "Spender " + TESTNET.exchangeAddress.toLowerCase());
   assert.match(api.$("banner").textContent, /Robinhood Chain Testnet/);
-  assert.match(api.$("banner").textContent, /0x3d9b…d9bd/);
+  assert.match(api.$("banner").textContent, /0x3502…e8ea/);
 });
 
 test("the order book is read from the exchange and the prices are the contract values", async () => {
@@ -1097,6 +1106,14 @@ test("the wrong wallet network does not send a transaction", async () => {
   await settle();
   assert.equal(sends(api).length, 0);
   assert.match(api.$("status").textContent, /Wrong network/);
+  const switchLink = api.$("status").querySelectorAll(".linkish")[0];
+  assert.equal(switchLink.textContent, "Robinhood Chain Testnet");
+  api.clickNode(switchLink);
+  await settle();
+  assert.equal(
+    api.calls.some((call) => call.channel === "wallet" && call.method === "wallet_switchEthereumChain"),
+    true,
+  );
 });
 
 test("a saved exchange address is ignored", async () => {
@@ -1142,7 +1159,7 @@ test("the current order book splits the taker fee and places an order without a 
   assert.equal(api.$("hint-soft-row").hidden, false);
   assert.equal(api.$("parked-row").hidden, true);
   assert.equal(api.$("fee-label").textContent, "Maker fee 0%. Taker fee 0.3%.");
-  assert.equal(api.$("banner").textContent, "Robinhood Chain Testnet · public RPC · exchange 0x3d9b…d9bd.");
+  assert.equal(api.$("banner").textContent, "Robinhood Chain Testnet · public RPC · exchange 0x3502…e8ea.");
   assert.doesNotMatch(api.$("banner").textContent, /referr/i);
   assert.equal(callsWithSelector(api, SEL.getOrderBookWithStartId).length, 0);
   api.setInput("price-input", "100");

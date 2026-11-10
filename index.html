@@ -76,6 +76,32 @@
   .banner.ok, .status.ok { background: #12241c; color: #9ee0c2; }
   .status { display: flex; gap: 12px; align-items: baseline; }
   .status a, td a { color: var(--accent); }
+  .status button.linkish {
+    display: inline;
+    padding: 0;
+    border: 0;
+    background: transparent;
+    color: var(--accent);
+    font: inherit;
+    text-decoration: underline;
+    cursor: pointer;
+  }
+  .status.is-pending #status::before {
+    content: "";
+    display: inline-block;
+    width: 0.65em;
+    height: 0.65em;
+    margin-right: 0.45em;
+    border: 1.5px solid currentColor;
+    border-right-color: transparent;
+    border-radius: 50%;
+    vertical-align: -0.05em;
+    animation: status-spin 0.7s linear infinite;
+  }
+  @keyframes status-spin { to { transform: rotate(360deg); } }
+  @media (prefers-reduced-motion: reduce) {
+    .status.is-pending #status::before { animation: none; border-right-color: currentColor; opacity: 0.7; }
+  }
   main {
     flex: 1;
     min-height: 0;
@@ -454,12 +480,13 @@ const CHAINS = [
     chainName: "Robinhood Chain Testnet",
     rpcUrl: "https://rpc.testnet.chain.robinhood.com",
     explorerUrl: "https://explorer.testnet.chain.robinhood.com",
-    exchangeAddress: "0x3d9B1887B10ee3d94fbDEA1592Fe80a460A6d9bD",
+    exchangeAddress: "0x3502F1172E06FAd80dd56b1aE87cdA8204bbe8eA",
     protocolFeePercent: 50,
     protocolFeeReceiver: "0x646BDE77b001AE117D596a0DE3A35Dc18370B2aC",
     marketIds: [
-      "0x29a51d483798551e89bc14aa76c2282fec539a4d3593c46a54d27aa59ef51095",
-      "0x4b94167d0253f6b7bc521146670ba253313b1e19f611c582420645e1def42c24",
+      { id: "0x8fb4e7e01625f7f1517569f43321dada01159bc3fe5f4cf73db7801a6fa2ceb0", label: "ETH/USDC" },
+      { id: "0x9e8f200f74d27a24aeb27a6f2a83e4acd4f98d230ff2bc2a45fbb921fdbed953", label: "EURC/USDC" },
+      { id: "0xc7bcdfdbc3dec7ceb2d50372ff7e40008eabc54010f83f89500e71f4d289d368", label: "ETH/TSLA" },
     ],
   },
   {
@@ -468,12 +495,13 @@ const CHAINS = [
     chainName: "Ethereum Sepolia",
     rpcUrl: "https://ethereum-sepolia-rpc.publicnode.com",
     explorerUrl: "https://sepolia.etherscan.io",
-    exchangeAddress: "0xEEfC0997B53F2FD2d7a4FB1399f2eb12D542Fe87",
+    exchangeAddress: "0x1f43351622dD159693224B73618F4CB32158B261",
     protocolFeePercent: 50,
     protocolFeeReceiver: "0x646BDE77b001AE117D596a0DE3A35Dc18370B2aC",
     marketIds: [
-      "0xf95153cbc4fb6083d98844b3d7feffa94f668633715f4f51a6324e054ad68fd2",
-      "0x20c4fbfaed887d889a290d9fe7d3e16ee17ce82f68854b65c4c3a4bf4c9f243c",
+      { id: "0x85c7bb7eec380a80f41bb67969552ccead20b4d4b754f555c525437c00fbcaf8", label: "ETH/USDC" },
+      { id: "0x3d8f0db23cd995028f5a5c024b7d827f48e3e3aa7ec9ca93bfae53dae0867209", label: "EURC/USDC" },
+      { id: "0x7629969c111a1716f9b508067423da65193f67334493925468994e513101e309", label: "ETH/TSLA" },
     ],
   },
   {
@@ -498,12 +526,13 @@ const CHAINS = [
     chainName: "Base Sepolia",
     rpcUrl: "https://base-sepolia-rpc.publicnode.com",
     explorerUrl: "https://sepolia.basescan.org",
-    exchangeAddress: "0xEEfC0997B53F2FD2d7a4FB1399f2eb12D542Fe87",
+    exchangeAddress: "0x4A6C522C88AB8185BAd1Eb79F57d25183F640Ece",
     protocolFeePercent: 50,
     protocolFeeReceiver: "0x646BDE77b001AE117D596a0DE3A35Dc18370B2aC",
     marketIds: [
-      "0x341612d9daa51cfe982c31d5eef5805778e0461d260ad7f9d3aeea7a5247ee3c",
-      "0x36a99031290d07e1e9f4e3e0b38d3faddbe3e9c25949e93049af715d8ecc3477",
+      { id: "0x9175664c5877bb06f367ece4d44bf7bcb04f296c5d24c62465714917d99c5b38", label: "ETH/USDC" },
+      { id: "0x9278a943020206c0f9d32e5668d03229c546474c31b3a82c48b22192ad885bcd", label: "EURC/USDC" },
+      { id: "0x6368d1bcddc64285164e05ac6f8e81ae3d9fd0603725ba1bddc191b8f288c57e", label: "ETH/TSLA" },
     ],
   },
   {
@@ -564,6 +593,7 @@ const state = {
   ethBalance: 0n,
   tokenMeta: new Map(),
   txLock: false,
+  txPhase: null,
   refreshing: false,
   refreshQueued: false,
   pollTimer: null,
@@ -771,10 +801,17 @@ function parseUnits(value, decimals) {
   return BigInt(whole) * scale + BigInt((frac.padEnd(places, "0") || "0"));
 }
 
+function asBigInt(value) {
+  if (typeof value === "bigint") return value;
+  if (value == null || value === "") return 0n;
+  return BigInt(value);
+}
+
 function formatUnits(value, decimals, maxFrac) {
+  const amount = asBigInt(value);
   const places = Number(decimals);
-  const negative = value < 0n;
-  const magnitude = negative ? -value : value;
+  const negative = amount < 0n;
+  const magnitude = negative ? -amount : amount;
   const scale = 10n ** BigInt(places);
   const whole = magnitude / scale;
   let fracText = places === 0 ? "" : (magnitude % scale).toString().padStart(places, "0");
@@ -786,20 +823,22 @@ function formatUnits(value, decimals, maxFrac) {
 }
 
 function formatAmount(value, decimals) {
+  const amount = asBigInt(value);
   const places = Number(decimals);
-  const short = formatUnits(value, places, Math.min(6, places));
-  if (short === "0" && value !== 0n) return formatUnits(value, places, places);
+  const short = formatUnits(amount, places, Math.min(6, places));
+  if (short === "0" && amount !== 0n) return formatUnits(amount, places, places);
   return short;
 }
 
 function formatFeeRate(numerator, denominator) {
-  if (denominator === 0n) return "—";
-  const scaled = (numerator * 1000000n) / denominator;
+  const den = asBigInt(denominator);
+  if (den === 0n) return "—";
+  const scaled = (asBigInt(numerator) * 1000000n) / den;
   return formatUnits(scaled, 4) + "%";
 }
 
 function quoteRaw(baseRaw, priceRaw, baseDecimals) {
-  return (baseRaw * priceRaw) / (10n ** BigInt(baseDecimals));
+  return (asBigInt(baseRaw) * asBigInt(priceRaw)) / (10n ** BigInt(baseDecimals));
 }
 
 function shortAddress(value) {
@@ -818,12 +857,29 @@ function setBanner(text, kind) {
 
 function setStatus(text, txHash, kind) {
   $("status").textContent = text;
-  $("status-row").className = "status " + (kind || "info");
+  const pending = Boolean(state.txLock);
+  $("status-row").className = "status " + (kind || "info") + (pending ? " is-pending" : "");
   const link = $("tx-link");
   link.replaceChildren();
   if (txHash && /^0x[0-9a-fA-F]{64}$/.test(txHash) && chain().explorerUrl) {
     link.appendChild(explorerLink("View transaction", txHash));
   }
+}
+
+function setWrongNetworkStatus() {
+  const node = $("status");
+  const button = el("button", "linkish", chain().chainName);
+  button.type = "button";
+  button.addEventListener("click", () => {
+    onWalletClick().catch((error) => setStatus(explainError(error), null, "error"));
+  });
+  node.replaceChildren(
+    el("span", null, "Wrong network. Switch to "),
+    button,
+    el("span", null, "."),
+  );
+  $("status-row").className = "status warn";
+  $("tx-link").replaceChildren();
 }
 
 function explainError(error) {
@@ -978,7 +1034,8 @@ async function probeExchange() {
   }
   const words = decodeWords(details).length;
   if (currentBook) {
-    if (words !== 8) {
+    // Published MatchingOrderBook: 10 words (post+order mins). Legacy builds used 8.
+    if (words !== 10 && words !== 8) {
       state.interfaceKind = null;
       state.blockReason = "getMarketDetails returned " + words + " words, not the published market struct.";
       return false;
@@ -1000,6 +1057,27 @@ async function probeExchange() {
 function decodeMarketDetails(hex) {
   const words = decodeWords(hex);
   if (state.interfaceKind === "current") {
+    // New ABI: base, quote, basePostMin, quotePostMin, baseOrderMin, quoteOrderMin,
+    // feeNum, feeDen, baseDecimals, bank. Legacy current ABI folded post+order into one min pair.
+    if (words.length >= 10) {
+      const baseDecimals = Number(words[8]);
+      if (!Number.isInteger(baseDecimals) || baseDecimals < 0 || baseDecimals > 255) {
+        throw new Error("Market base decimals are invalid.");
+      }
+      return {
+        baseToken: wordToAddress(words[0]),
+        quoteToken: wordToAddress(words[1]),
+        baseMin: words[2],
+        quoteMin: words[3],
+        baseOrderMin: words[4],
+        quoteOrderMin: words[5],
+        feeNum: words[6],
+        feeDen: words[7],
+        baseDecimals,
+        feeReceiver: null,
+        bank: wordToAddress(words[9]),
+      };
+    }
     if (words.length < 8) throw new Error("Market details are incomplete.");
     const baseDecimals = Number(words[6]);
     if (!Number.isInteger(baseDecimals) || baseDecimals < 0 || baseDecimals > 255) {
@@ -1010,6 +1088,8 @@ function decodeMarketDetails(hex) {
       quoteToken: wordToAddress(words[1]),
       baseMin: words[2],
       quoteMin: words[3],
+      baseOrderMin: words[2],
+      quoteOrderMin: words[3],
       feeNum: words[4],
       feeDen: words[5],
       baseDecimals,
@@ -1024,6 +1104,8 @@ function decodeMarketDetails(hex) {
       quoteToken: wordToAddress(words[1]),
       baseMin: words[2],
       quoteMin: words[3],
+      baseOrderMin: words[2],
+      quoteOrderMin: words[3],
       feeNum: words[4],
       feeDen: words[5],
       baseDecimals: null,
@@ -1037,6 +1119,8 @@ function decodeMarketDetails(hex) {
     quoteToken: wordToAddress(words[1]),
     baseMin: words[2],
     quoteMin: words[3],
+    baseOrderMin: words[2],
+    quoteOrderMin: words[3],
     feeNum: null,
     feeDen: null,
     baseDecimals: null,
@@ -1092,6 +1176,8 @@ async function readMarket(marketId) {
     quote,
     baseMin: details.baseMin,
     quoteMin: details.quoteMin,
+    baseOrderMin: details.baseOrderMin,
+    quoteOrderMin: details.quoteOrderMin,
     feeNum: details.feeNum,
     feeDen: details.feeDen,
     feeReceiver: details.feeReceiver,
@@ -1100,9 +1186,65 @@ async function readMarket(marketId) {
   };
 }
 
-function builtinIds() {
+function marketEntries() {
   const list = chain().marketIds || [];
-  return list.filter((id) => isBytes32(id)).map((id) => id.toLowerCase());
+  return list.map((entry) => {
+    if (typeof entry === "string") return { id: entry.toLowerCase(), label: null };
+    const id = entry && entry.id != null ? String(entry.id).toLowerCase() : "";
+    return { id, label: entry && entry.label ? String(entry.label) : null };
+  }).filter((entry) => isBytes32(entry.id));
+}
+
+function builtinIds() {
+  return marketEntries().map((entry) => entry.id);
+}
+
+function stubMarketsFromConfig() {
+  return marketEntries().map((entry) => {
+    const label = entry.label || (entry.id.slice(0, 6) + "…" + entry.id.slice(-4));
+    const parts = label.split("/");
+    const baseSym = parts[0] || "BASE";
+    const quoteSym = parts[1] || "QUOTE";
+    return {
+      id: entry.id,
+      label,
+      title: baseSym + " / " + quoteSym,
+      base: {
+        address: baseSym === "ETH" ? NATIVE_TOKEN : "0x00000000000000000000000000000000000000b1",
+        symbol: baseSym,
+        name: baseSym,
+        decimals: 18,
+        native: baseSym === "ETH",
+      },
+      quote: {
+        address: "0x00000000000000000000000000000000000000c1",
+        symbol: quoteSym,
+        name: quoteSym,
+        decimals: 18,
+        native: false,
+      },
+      baseMin: 0n,
+      quoteMin: 0n,
+      baseOrderMin: 0n,
+      quoteOrderMin: 0n,
+      feeNum: null,
+      feeDen: null,
+      feeReceiver: null,
+      bank: "0x0000000000000000000000000000000000000012",
+      sample: false,
+      stub: true,
+    };
+  }).sort((a, b) => a.label.localeCompare(b.label));
+}
+
+function paintConfiguredMarkets() {
+  const stubs = stubMarketsFromConfig();
+  if (!stubs.length) return;
+  state.markets = stubs;
+  const stored = localStorage.getItem(storageKey("selected"));
+  state.marketId = stubs.some((market) => market.id === stored) ? stored : stubs[0].id;
+  renderMarketSelect();
+  renderMeta();
 }
 
 function padAddressTopic(address) {
@@ -1472,6 +1614,15 @@ function tradeIntent() {
   if (quote === 0n) return { ok: false, reason: "The quote amount rounds down to zero at this price scale." };
   const extras = orderExtras();
   if (!extras.ok) return { ok: false, reason: extras.reason };
+  // Current ABI: sizes below order mins revert on-chain. Below post mins still place as IOC/FOK.
+  if (
+    state.interfaceKind === "current"
+    && market.baseOrderMin != null
+    && market.quoteOrderMin != null
+    && (baseRawValue < market.baseOrderMin || quote < market.quoteOrderMin)
+  ) {
+    return { ok: false, reason: "Order is below the market minimum size." };
+  }
   const belowMin = baseRawValue < market.baseMin || quote < market.quoteMin;
   const spendToken = state.side === BUY ? market.quote : market.base;
   const required = state.side === BUY ? quote : baseRawValue;
@@ -1745,6 +1896,12 @@ function renderMeta() {
     return;
   }
   document.title = market.label + " — ZigZag";
+  if (market.stub) {
+    meta.textContent = "Loading market…";
+    $("min-label").textContent = "Minimum post —";
+    $("fee-label").textContent = "Market fee —";
+    return;
+  }
   const minBase = formatAmount(market.baseMin, market.base.decimals) + " " + market.base.symbol;
   const minQuote = formatAmount(market.quoteMin, market.quote.decimals) + " " + market.quote.symbol;
   meta.textContent = "Min " + minBase + " · " + minQuote;
@@ -1790,7 +1947,10 @@ function updateTradeState() {
   $("fok-label").textContent = "This size is below the posted minimum. Confirming it submits a normal order.";
   place.className = "btn " + (state.side === BUY ? "buy" : "sell");
   const market = selectedMarket();
-  place.textContent = market ? (state.side === BUY ? "Buy " : "Sell ") + market.base.symbol : "Place order";
+  const actionLabel = market ? (state.side === BUY ? "Buy " : "Sell ") + market.base.symbol : "Place order";
+  if (state.txLock && state.txPhase === "sign") place.textContent = "Waiting for wallet…";
+  else if (state.txLock) place.textContent = "Confirming…";
+  else place.textContent = actionLabel;
   if (!intent.ok) {
     $("total-output").textContent = "Total —";
     message.textContent = $("price-input").value || $("amount-input").value ? intent.reason : "";
@@ -1805,11 +1965,13 @@ function updateTradeState() {
     const fokOk = !intent.belowMin || $("fok-check").checked;
     const nativeSpend = isNativeToken(intent.spendToken.address);
     const enough = nativeSpend || intent.allowance >= intent.required;
+    const stubbed = Boolean(intent.market.stub);
     approve.textContent = nativeSpend ? "Native " + intent.spendToken.symbol : enough ? "Approved" : "Approve " + intent.spendToken.symbol;
-    approve.disabled = !live || state.txLock || enough || nativeSpend;
+    approve.disabled = !live || state.txLock || enough || nativeSpend || stubbed;
     reset.hidden = !(live && !nativeSpend && intent.allowance > 0n && intent.allowance < intent.required);
-    place.disabled = !live || state.txLock || !enough || !fokOk;
+    place.disabled = !live || state.txLock || !enough || !fokOk || stubbed;
     if (!live) message.textContent = state.mode === "demo" ? "Demo data only. Orders are not sent." : "Connect a wallet on " + chain().chainName + " to trade.";
+    else if (stubbed) message.textContent = "Loading market details…";
     else if (!enough) message.textContent = "Allowance is below this order. The spender is the exchange contract.";
     else if (!fokOk) message.textContent = "This order is below the posted minimum. Confirm it to submit a normal order.";
     else message.textContent = "";
@@ -1871,6 +2033,7 @@ async function boot() {
   state.fillScanTo = null;
   state.fillNote = "";
   setBanner("Loading " + chain().chainName + "…", "info");
+  paintConfiguredMarkets();
   try {
     if (window.ethereum) {
       try { state.walletChainId = await walletRpc("eth_chainId"); } catch (ignore) { state.walletChainId = null; }
@@ -1904,8 +2067,13 @@ async function boot() {
     }
     markets.sort((a, b) => a.label.localeCompare(b.label));
     state.markets = markets;
-    const stored = localStorage.getItem(storageKey("selected"));
-    state.marketId = markets.some((market) => market.id === stored) ? stored : (markets[0] ? markets[0].id : null);
+    state.marketSignature = "";
+    if (markets.length) {
+      const stored = localStorage.getItem(storageKey("selected"));
+      state.marketId = markets.some((market) => market.id === stored) ? stored : markets[0].id;
+    } else {
+      state.marketId = null;
+    }
     const feeNote = state.interfaceKind === "plain"
       ? " This deployment has no fee fields on the market."
       : state.interfaceKind === "fee"
@@ -1949,7 +2117,7 @@ async function connectWallet() {
     state.walletChainId = await walletRpc("eth_chainId");
     renderWallet();
     if (!sameChain(state.walletChainId)) {
-      setStatus("Wrong network. Switch to " + chain().chainName + ".", null, "warn");
+      setWrongNetworkStatus();
       return;
     }
     await refresh();
@@ -2029,12 +2197,18 @@ function runAction(fn) {
     return;
   }
   state.txLock = true;
+  state.txPhase = "sign";
   updateTradeState();
   Promise.resolve()
     .then(fn)
-    .catch((error) => setStatus(explainError(error), null, "error"))
+    .catch((error) => {
+      const message = explainError(error);
+      if (/^Wrong network\. Switch to /.test(message)) setWrongNetworkStatus();
+      else setStatus(message, null, "error");
+    })
     .finally(() => {
       state.txLock = false;
+      state.txPhase = null;
       updateTradeState();
     });
 }
@@ -2075,6 +2249,8 @@ async function waitReceipt(hash) {
 async function sendTx(to, data, value) {
   const from = await requireAccount();
   await simulate(from, to, data, value);
+  state.txPhase = "sign";
+  updateTradeState();
   setStatus("Waiting for the wallet signature…", null, "info");
   const hash = await walletRpc("eth_sendTransaction", [{
     from,
@@ -2082,6 +2258,8 @@ async function sendTx(to, data, value) {
     data,
     value: "0x" + value.toString(16),
   }]);
+  state.txPhase = "confirm";
+  updateTradeState();
   setStatus("Waiting for confirmation…", hash, "info");
   const receipt = await waitReceipt(hash);
   if (!receipt || receipt.status === "0x0") throw new Error("Transaction reverted.");
@@ -2247,7 +2425,7 @@ function bind() {
       window.ethereum.on("chainChanged", (chainId) => {
         state.walletChainId = chainId;
         if (state.mode === "live" && !sameChain(chainId)) {
-          setStatus("Wrong network. Switch to " + chain().chainName + ".", null, "warn");
+          setWrongNetworkStatus();
         }
         renderWallet();
         refresh();
