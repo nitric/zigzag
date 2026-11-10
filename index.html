@@ -801,10 +801,17 @@ function parseUnits(value, decimals) {
   return BigInt(whole) * scale + BigInt((frac.padEnd(places, "0") || "0"));
 }
 
+function asBigInt(value) {
+  if (typeof value === "bigint") return value;
+  if (value == null || value === "") return 0n;
+  return BigInt(value);
+}
+
 function formatUnits(value, decimals, maxFrac) {
+  const amount = asBigInt(value);
   const places = Number(decimals);
-  const negative = value < 0n;
-  const magnitude = negative ? -value : value;
+  const negative = amount < 0n;
+  const magnitude = negative ? -amount : amount;
   const scale = 10n ** BigInt(places);
   const whole = magnitude / scale;
   let fracText = places === 0 ? "" : (magnitude % scale).toString().padStart(places, "0");
@@ -816,20 +823,22 @@ function formatUnits(value, decimals, maxFrac) {
 }
 
 function formatAmount(value, decimals) {
+  const amount = asBigInt(value);
   const places = Number(decimals);
-  const short = formatUnits(value, places, Math.min(6, places));
-  if (short === "0" && value !== 0n) return formatUnits(value, places, places);
+  const short = formatUnits(amount, places, Math.min(6, places));
+  if (short === "0" && amount !== 0n) return formatUnits(amount, places, places);
   return short;
 }
 
 function formatFeeRate(numerator, denominator) {
-  if (denominator === 0n) return "—";
-  const scaled = (numerator * 1000000n) / denominator;
+  const den = asBigInt(denominator);
+  if (den === 0n) return "—";
+  const scaled = (asBigInt(numerator) * 1000000n) / den;
   return formatUnits(scaled, 4) + "%";
 }
 
 function quoteRaw(baseRaw, priceRaw, baseDecimals) {
-  return (baseRaw * priceRaw) / (10n ** BigInt(baseDecimals));
+  return (asBigInt(baseRaw) * asBigInt(priceRaw)) / (10n ** BigInt(baseDecimals));
 }
 
 function shortAddress(value) {
