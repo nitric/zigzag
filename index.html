@@ -509,8 +509,15 @@ const CHAINS = [
     chainId: "0x1237",
     chainName: "Robinhood Chain",
     rpcUrl: "https://rpc.mainnet.chain.robinhood.com",
-    explorerUrl: "https://robinhoodchain.blockscout.com",
-    exchangeAddress: "",
+    explorerUrl: "https://robin.etherscan.io",
+    exchangeAddress: "0xb9D41017e48A130ECc37562Aee18dEfabBA3B2e2",
+    protocolFeePercent: 50,
+    protocolFeeReceiver: "0x11c07CE82Ec3583f9958E22390385476b2Cef992",
+    marketIds: [
+      { id: "0x629de63cd0b9e6ad1b54994833ef6b7f795de5f1ec451c36e9fb89ea0de43a3c", label: "ETH/USDC" },
+      { id: "0x6c7c2672dea703138023dc91209f239099dc13cb4184ed87af2113b12ea1b807", label: "EURC/USDC" },
+      { id: "0xbe577dfe6b6165d6067f5ffe4e440c6da33e7fc893344a5da992addf2397b2e0", label: "ETH/TSLA" },
+    ],
   },
   {
     key: "ethereum",
