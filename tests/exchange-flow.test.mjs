@@ -814,9 +814,8 @@ test("Robinhood testnet is pinned and chains without a deployment have no exchan
   assert.equal(robinhood.exchangeAddress, "0xb9D41017e48A130ECc37562Aee18dEfabBA3B2e2");
   assert.equal(robinhood.protocolFeeReceiver, "0x11c07CE82Ec3583f9958E22390385476b2Cef992");
   assert.equal(JSON.stringify(robinhood.marketIds), JSON.stringify([
-    { id: "0x629de63cd0b9e6ad1b54994833ef6b7f795de5f1ec451c36e9fb89ea0de43a3c", label: "ETH/USDC" },
-    { id: "0x6c7c2672dea703138023dc91209f239099dc13cb4184ed87af2113b12ea1b807", label: "EURC/USDC" },
-    { id: "0xbe577dfe6b6165d6067f5ffe4e440c6da33e7fc893344a5da992addf2397b2e0", label: "ETH/TSLA" },
+    { id: "0xbca9769f13cc29fbe2c15b4a7aa3050d39d2f97f0ed8e7d848c1d30218026712", label: "NVDA/USDG" },
+    { id: "0xc6ebac281bbc24391ccaccb8d7a0795cdb6ab44b7cd624ef519cc07e583c443d", label: "ETH/USDG" },
   ]));
   const base = api.page.CHAINS.find((chain) => chain.key === "base");
   assert.equal(base.chainId, "0x2105");
