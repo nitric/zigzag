@@ -809,9 +809,17 @@ test("Robinhood testnet is pinned and chains without a deployment have no exchan
     { id: "0x9278a943020206c0f9d32e5668d03229c546474c31b3a82c48b22192ad885bcd", label: "EURC/USDC" },
     { id: "0x6368d1bcddc64285164e05ac6f8e81ae3d9fd0603725ba1bddc191b8f288c57e", label: "ETH/TSLA" },
   ]));
+  const robinhood = api.page.CHAINS.find((chain) => chain.key === "robinhood");
+  assert.equal(robinhood.chainId, "0x1237");
+  assert.equal(robinhood.exchangeAddress, "0xb9D41017e48A130ECc37562Aee18dEfabBA3B2e2");
+  assert.equal(robinhood.protocolFeeReceiver, "0x11c07CE82Ec3583f9958E22390385476b2Cef992");
+  assert.equal(JSON.stringify(robinhood.marketIds), JSON.stringify([
+    { id: "0xbca9769f13cc29fbe2c15b4a7aa3050d39d2f97f0ed8e7d848c1d30218026712", label: "NVDA/USDG" },
+    { id: "0xc6ebac281bbc24391ccaccb8d7a0795cdb6ab44b7cd624ef519cc07e583c443d", label: "ETH/USDG" },
+  ]));
   const base = api.page.CHAINS.find((chain) => chain.key === "base");
   assert.equal(base.chainId, "0x2105");
-  for (const key of ["robinhood", "ethereum", "base"]) {
+  for (const key of ["ethereum", "base"]) {
     const chain = api.page.CHAINS.find((item) => item.key === key);
     assert.equal(chain.exchangeAddress, "", chain.chainName + " should not ship an exchange address");
     assert.equal(chain.marketIds, undefined);
